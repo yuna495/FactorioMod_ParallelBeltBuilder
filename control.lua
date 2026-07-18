@@ -142,7 +142,7 @@ local function update_toggle_button(btn, selected, width)
   else
     btn.style = "button"
   end
-  
+
   -- スタイル切り替えによるフォント崩れや位置ズレを防ぐためパラメータを明示的に上書き統一する
   btn.style.width = width
   btn.style.font = "default-semibold"
@@ -702,6 +702,13 @@ script.on_event(defines.events.on_lua_shortcut, function(event)
     if not player then return end
     toggle_gui_and_recording(player)
   end
+end)
+
+-- キーボードショートカットイベント (Ctrl+Alt+Q)
+script.on_event("pbb-toggle-recording-key", function(event)
+  local player = game.get_player(event.player_index)
+  if not player then return end
+  toggle_gui_and_recording(player)
 end)
 
 -- GUIをEscキーや閉じるボタンで閉じた時のイベント

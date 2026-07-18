@@ -9,5 +9,11 @@ data:extend({
     small_icon = "__base__/graphics/icons/transport-belt.png",
     small_icon_size = 64,
     localised_name = {"shortcut.pbb-toggle-recording"}
+  },
+  {
+    type = "custom-input",
+    name = "pbb-toggle-recording-key",
+    key_sequence = "CONTROL + ALT + Q",
+    consuming = "none"
   }
 })
