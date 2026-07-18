@@ -3,7 +3,7 @@
 local function get_default_player_state()
   return {
     recording = false,
-    previewing = false,
+    placing = false,
     count = 4,
     side = "right",
     placement = "ghost",
@@ -20,7 +20,7 @@ local function init_players()
     if not storage.players[player.index] then
       storage.players[player.index] = get_default_player_state()
     else
-      -- キーの欠損対策（アップデート時など）
+      -- キーの欠損対策
       local default = get_default_player_state()
       for k, v in pairs(default) do
         if storage.players[player.index][k] == nil then
@@ -96,6 +96,9 @@ local function get_or_create_gui(player)
     flow_actions.add{type = "button", name = "pbb_start", caption = "Start recording"}
     flow_actions.add{type = "button", name = "pbb_stop", caption = "Stop recording"}
     flow_actions.add{type = "button", name = "pbb_cancel", caption = "Cancel"}
+    
+    -- EscキーでGUIを閉じるための紐付け
+    player.opened = window
   end
   return window
 end
@@ -142,9 +145,10 @@ local function update_gui(player)
   end
   
   local is_recording = p_state.recording
-  local is_idle = not is_recording
+  local is_placing = p_state.placing
+  local is_idle = not is_recording and not is_placing
   
-  -- 待機状態 (Idle) のときのみ設定変更可能
+  -- 各状態におけるボタン制御
   window.flow_count.pbb_count_minus.enabled = is_idle
   window.flow_count.pbb_count_plus.enabled = is_idle
   side_left.enabled = is_idle
@@ -153,55 +157,261 @@ local function update_gui(player)
   place_ghost.enabled = is_idle
   
   window.flow_actions.pbb_start.enabled = is_idle
-  window.flow_actions.pbb_stop.enabled = is_recording
-  window.flow_actions.pbb_cancel.enabled = is_recording
+  window.flow_actions.pbb_stop.enabled = is_recording and not is_placing
+  window.flow_actions.pbb_cancel.enabled = is_recording and not is_placing
 end
 
--- 基準経路の方向に応じたオフセット座標を取得
-local function get_side_offsets(direction, col, side)
-  local factor = (side == "left") and -1 or 1
-  if direction == defines.direction.north then
-    return col * factor, 0
-  elseif direction == defines.direction.east then
-    return 0, col * factor
-  elseif direction == defines.direction.south then
-    return -col * factor, 0
-  elseif direction == defines.direction.west then
-    return 0, -col * factor
+-- 向きに対応する単位ベクトルを取得 (Y軸は下が正)
+local function get_dir_vector(dir)
+  if dir == defines.direction.north then return 0, -1
+  elseif dir == defines.direction.east then return 1, 0
+  elseif dir == defines.direction.south then return 0, 1
+  elseif dir == defines.direction.west then return -1, 0
   end
   return 0, 0
 end
 
--- 直線経路かどうかの判定
-local function is_straight_path(path)
-  if #path == 0 then return false end
+-- 展開方向に応じたオフセットベクトルを取得
+local function get_offset_vector(direction, side)
+  local factor = (side == "left") and -1 or 1
+  if direction == defines.direction.north then return factor, 0
+  elseif direction == defines.direction.east then return 0, factor
+  elseif direction == defines.direction.south then return -factor, 0
+  elseif direction == defines.direction.west then return 0, -factor
+  end
+  return 0, 0
+end
+
+-- 基準経路の構造解析と順序ソート
+local function analyze_path(player, path, expected_belt_type)
+  if #path == 0 then return nil, "message.pbb-no-belts-placed" end
+
+  local surface = player.surface
+  local seen = {}
+  local unique_nodes = {}
   
-  local base_dir = path[1].direction
-  local base_x = path[1].x
-  local base_y = path[1].y
-  
-  local is_vertical = (base_dir == defines.direction.north or base_dir == defines.direction.south)
-  
-  for i = 2, #path do
-    if path[i].direction ~= base_dir then
-      return false
-    end
-    if is_vertical then
-      if math.abs(path[i].x - base_x) > 0.01 then
-        return false
+  for _, item in ipairs(path) do
+    -- 浮動小数の誤差を排除するためタイルインデックス（整数）で管理
+    local tx = math.floor(item.x)
+    local ty = math.floor(item.y)
+    local key = string.format("%d,%d", tx, ty)
+    
+    if not seen[key] then
+      -- 配置された位置のベルトをサーフェスから直接検索し、最新の向きと種類を取得する
+      -- これにより、ドラッグ配置による自動方向転換や、手動の回転・置換を正しく反映する
+      local ents = surface.find_entities_filtered{
+        position = {x = tx + 0.5, y = ty + 0.5},
+        radius = 0.45,
+        type = "transport-belt"
+      }
+      
+      local actual_name = nil
+      local actual_dir = nil
+      if #ents > 0 and ents[1].valid then
+        actual_name = ents[1].name
+        actual_dir = ents[1].direction
       end
-    else
-      if math.abs(path[i].y - base_y) > 0.01 then
-        return false
+      
+      -- ベルトが撤去されたか、別種類に置換された場合
+      if not actual_name or actual_name ~= expected_belt_type then
+        return nil, "message.pbb-path-modified-error"
       end
+      
+      seen[key] = {
+        tx = tx,
+        ty = ty,
+        x = tx + 0.5,
+        y = ty + 0.5,
+        direction = actual_dir,
+        key = key,
+        incoming = {},
+        outgoing = {}
+      }
+      table.insert(unique_nodes, seen[key])
     end
   end
-  return true
+
+  -- 隣接接続関係を構築
+  for _, node in ipairs(unique_nodes) do
+    local dx, dy = get_dir_vector(node.direction)
+    local dest_tx = node.tx + dx
+    local dest_ty = node.ty + dy
+    local dest_key = string.format("%d,%d", dest_tx, dest_ty)
+    
+    local dest_node = seen[dest_key]
+    if dest_node then
+      table.insert(node.outgoing, dest_key)
+      table.insert(dest_node.incoming, node.key)
+    end
+  end
+
+  -- 分岐・合流・始点・終点の検証
+  local starts = {}
+  local ends = {}
+  for _, node in ipairs(unique_nodes) do
+    local in_count = #node.incoming
+    local out_count = #node.outgoing
+    
+    if in_count > 1 or out_count > 1 then
+      return nil, "message.pbb-path-has-branches"
+    end
+    
+    if in_count == 0 then
+      table.insert(starts, node)
+    end
+    if out_count == 0 then
+      table.insert(ends, node)
+    end
+  end
+
+  if #starts ~= 1 or #ends ~= 1 then
+    return nil, "message.pbb-invalid-path-structure"
+  end
+
+  -- 始点から終点まで順序ソート
+  local start_node = starts[1]
+  local sorted_path = {}
+  local current = start_node
+  local visited = {}
+  
+  while current do
+    if visited[current.key] then
+      return nil, "message.pbb-invalid-path-structure" -- ループ検知
+    end
+    visited[current.key] = true
+    table.insert(sorted_path, current)
+    
+    if #current.outgoing > 0 then
+      current = seen[current.outgoing[1]]
+    else
+      current = nil
+    end
+  end
+
+  -- 孤立した非連続経路がないか検証
+  if #sorted_path ~= #unique_nodes then
+    return nil, "message.pbb-invalid-path-structure"
+  end
+
+  return sorted_path
+end
+
+-- 連続する同方向のベルトを直線区間にグループ化
+local function group_into_segments(sorted_path)
+  local segments = {}
+  if #sorted_path == 0 then return segments end
+  
+  local current_seg = {
+    direction = sorted_path[1].direction,
+    is_vertical = (sorted_path[1].direction == defines.direction.north or sorted_path[1].direction == defines.direction.south),
+    nodes = { sorted_path[1] }
+  }
+  
+  for i = 2, #sorted_path do
+    local node = sorted_path[i]
+    local is_vert = (node.direction == defines.direction.north or node.direction == defines.direction.south)
+    if node.direction == current_seg.direction then
+      table.insert(current_seg.nodes, node)
+    else
+      -- 90度以外の転換 (180度Uターンなど) はエラーとする
+      if current_seg.is_vertical == is_vert then
+        return nil, "message.pbb-invalid-turn-warning"
+      end
+      
+      current_seg.base_coord = current_seg.is_vertical and current_seg.nodes[1].x or current_seg.nodes[1].y
+      table.insert(segments, current_seg)
+      
+      current_seg = {
+        direction = node.direction,
+        is_vertical = is_vert,
+        nodes = { node }
+      }
+    end
+  end
+  
+  current_seg.base_coord = current_seg.is_vertical and current_seg.nodes[1].x or current_seg.nodes[1].y
+  table.insert(segments, current_seg)
+  
+  return segments
+end
+
+-- 並列経路のタイル座標・方向の生成
+local function generate_parallel_path(segments, col, side)
+  local N = #segments
+  if N == 0 then return {} end
+  
+  -- 1. 各区間のオフセット基準値を設定
+  for _, seg in ipairs(segments) do
+    local ox, oy = get_offset_vector(seg.direction, side)
+    if seg.is_vertical then
+      seg.offset_coord = seg.base_coord + ox * col
+    else
+      seg.offset_coord = seg.base_coord + oy * col
+    end
+  end
+  
+  -- 2. 頂点座標の算出
+  local vertices = {}
+  
+  -- 始点頂点
+  local ox1, oy1 = get_offset_vector(segments[1].direction, side)
+  local start_node = segments[1].nodes[1]
+  table.insert(vertices, {x = start_node.x + ox1 * col, y = start_node.y + oy1 * col})
+  
+  -- 中間交点
+  for i = 2, N do
+    local prev = segments[i-1]
+    local curr = segments[i]
+    local intersection = {}
+    if prev.is_vertical then
+      intersection.x = prev.offset_coord
+      intersection.y = curr.offset_coord
+    else
+      intersection.x = curr.offset_coord
+      intersection.y = prev.offset_coord
+    end
+    table.insert(vertices, intersection)
+  end
+  
+  -- 終点頂点
+  local last_seg = segments[N]
+  local oxN, oyN = get_offset_vector(last_seg.direction, side)
+  local last_node = last_seg.nodes[#last_seg.nodes]
+  table.insert(vertices, {x = last_node.x + oxN * col, y = last_node.y + oyN * col})
+  
+  -- 3. 各直線区間を結ぶタイルの生成と逆行検証
+  local parallel_tiles = {}
+  for i = 1, N do
+    local A = vertices[i]
+    local B = vertices[i+1]
+    local dir = segments[i].direction
+    
+    local dx = B.x - A.x
+    local dy = B.y - A.y
+    local step_x, step_y = get_dir_vector(dir)
+    local dot = dx * step_x + dy * step_y
+    
+    -- 進行方向と逆向き (逆行・内側のきつい曲がりによる潰れ) を検出
+    if dot < -0.01 then
+      return nil, "message.pbb-path-collapse-warning"
+    end
+    
+    local len = math.max(math.abs(dx), math.abs(dy))
+    local end_idx = (i == N) and len or (len - 1)
+    
+    for step = 0, end_idx do
+      local tx = A.x + step_x * step
+      local ty = A.y + step_y * step
+      table.insert(parallel_tiles, {x = tx, y = ty, direction = dir})
+    end
+  end
+  
+  return parallel_tiles
 end
 
 -- タイル配置可能性・消費対象判定
 local function check_tile_state(surface, target_pos, belt_type, direction, force)
-  -- 1. 既存のベルトがあるかチェック
+  -- 既存ベルトの確認
   local existing_belts = surface.find_entities_filtered{
     position = target_pos,
     radius = 0.45,
@@ -211,7 +421,7 @@ local function check_tile_state(surface, target_pos, belt_type, direction, force
     return "skip_no_consume"
   end
   
-  -- 既存のゴーストがあるかチェック
+  -- 既存ゴーストの確認
   local existing_ghosts = surface.find_entities_filtered{
     position = target_pos,
     radius = 0.45,
@@ -225,7 +435,7 @@ local function check_tile_state(surface, target_pos, belt_type, direction, force
     end
   end
 
-  -- 2. その位置に実体またはゴーストが配置できるかチェック
+  -- 配置可否チェック
   local can_place = surface.can_place_entity{
     name = belt_type,
     position = target_pos,
@@ -245,10 +455,16 @@ local function reset_placement_state(player)
   local p_state = storage.players[player.index]
   if p_state then
     p_state.recording = false
-    p_state.previewing = false
+    p_state.placing = false
     p_state.belt_type = nil
     p_state.path = {}
   end
+  
+  -- openedが設定されていたら自動的にクリアする
+  if player.opened and player.opened.name == "pbb_main_window" then
+    player.opened = nil
+  end
+  
   local window = player.gui.screen.pbb_main_window
   player.set_shortcut_toggled("pbb-toggle-recording", window ~= nil)
   update_gui(player)
@@ -260,7 +476,7 @@ local function start_recording(player)
   if not p_state then return end
   
   p_state.recording = true
-  p_state.previewing = false
+  p_state.placing = false
   p_state.belt_type = nil
   p_state.path = {}
   
@@ -268,47 +484,77 @@ local function start_recording(player)
   update_gui(player)
 end
 
--- 配置確定処理 (実体またはゴースト配置)
+-- 配置確定処理 (解析、並列生成、配置実行を一括で行う)
 local function confirm_placement(player)
   local p_state = storage.players[player.index]
-  if not p_state or #p_state.path == 0 or not p_state.belt_type then
+  if not p_state or p_state.placing or #p_state.path == 0 or not p_state.belt_type then
     return false
   end
 
-  local path = p_state.path
+  p_state.placing = true
+  
+  -- 1. 基準経路の解析・接続順ソート
+  local sorted_path, err = analyze_path(player, p_state.path, p_state.belt_type)
+  if not sorted_path then
+    player.print({err})
+    p_state.placing = false
+    reset_placement_state(player)
+    return false
+  end
+  
+  -- 2. 直線区間へのグループ化
+  local segments, err2 = group_into_segments(sorted_path)
+  if not segments then
+    player.print({err2})
+    p_state.placing = false
+    reset_placement_state(player)
+    return false
+  end
+
   local belt_type = p_state.belt_type
   local count = p_state.count
   local side = p_state.side
   local placement = p_state.placement
   local surface = player.surface
 
-  -- 重複位置の排除
-  local seen = {}
-  local unique_path = {}
-  for _, item in ipairs(path) do
-    local key = string.format("%.1f,%.1f", item.x, item.y)
-    if not seen[key] then
-      seen[key] = true
-      table.insert(unique_path, item)
+  -- 3. 各並列列のタイル生成
+  local all_parallel_tiles = {}
+  for col = 1, count - 1 do
+    local col_tiles, err3 = generate_parallel_path(segments, col, side)
+    if not col_tiles then
+      player.print({err3})
+      p_state.placing = false
+      reset_placement_state(player)
+      return false
+    end
+    for _, tile in ipairs(col_tiles) do
+      table.insert(all_parallel_tiles, tile)
     end
   end
 
-  -- 配置対象タイルの選定
+  -- 重複タイルの排除
+  local seen = {}
+  local unique_tiles = {}
+  for _, tile in ipairs(all_parallel_tiles) do
+    local key = string.format("%.1f,%.1f", tile.x, tile.y)
+    if not seen[key] then
+      seen[key] = true
+      table.insert(unique_tiles, tile)
+    end
+  end
+
+  -- 4. 配置判定
   local place_positions = {}
-  for _, item in ipairs(unique_path) do
-    for col = 1, count - 1 do
-      local dx, dy = get_side_offsets(item.direction, col, side)
-      local target_pos = {x = item.x + dx, y = item.y + dy}
-      
-      local state = check_tile_state(surface, target_pos, belt_type, item.direction, player.force)
-      if state == "place" then
-        table.insert(place_positions, {pos = target_pos, dir = item.direction})
-      end
+  for _, tile in ipairs(unique_tiles) do
+    local state = check_tile_state(surface, {x = tile.x, y = tile.y}, belt_type, tile.direction, player.force)
+    if state == "place" then
+      table.insert(place_positions, tile)
     end
   end
 
   if #place_positions == 0 then
     player.print({"message.pbb-no-belts-placed"})
+    p_state.placing = false
     reset_placement_state(player)
     return true
   end
@@ -318,8 +564,8 @@ local function confirm_placement(player)
     local required_count = #place_positions
     local available_count = player.get_item_count(belt_type)
     if available_count < required_count then
-      -- アイテム不足：部分配置せず警告して終了（記録中ではないため、記録やり直しの必要性を避けるため状態はIdleに戻さず、記録中状態をキャンセル状態とするか、あるいはConfirm失敗として待機状態に戻す。今回は失敗として待機状態に戻し、配置をキャンセルする）
       player.print({"message.pbb-insufficient-items", required_count, {"entity-name." .. belt_type}, available_count})
+      p_state.placing = false
       reset_placement_state(player)
       return false
     end
@@ -329,11 +575,11 @@ local function confirm_placement(player)
     
     -- 実体配置
     local placed = 0
-    for _, item in ipairs(place_positions) do
+    for _, tile in ipairs(place_positions) do
       local ent = surface.create_entity{
         name = belt_type,
-        position = item.pos,
-        direction = item.dir,
+        position = {x = tile.x, y = tile.y},
+        direction = tile.direction,
         force = player.force,
         raise_built = true
       }
@@ -346,12 +592,12 @@ local function confirm_placement(player)
   else
     -- ゴースト配置モード
     local placed = 0
-    for _, item in ipairs(place_positions) do
+    for _, tile in ipairs(place_positions) do
       local ghost = surface.create_entity{
         name = "entity-ghost",
         inner_name = belt_type,
-        position = item.pos,
-        direction = item.dir,
+        position = {x = tile.x, y = tile.y},
+        direction = tile.direction,
         force = player.force,
         raise_built = true
       }
@@ -362,11 +608,12 @@ local function confirm_placement(player)
     player.print({"message.pbb-ghosts-placed", placed})
   end
 
+  p_state.placing = false
   reset_placement_state(player)
   return true
 end
 
--- 記録停止処理 (即時に配置処理を実行)
+-- 記録停止処理
 local function stop_recording(player)
   local p_state = storage.players[player.index]
   if not p_state or not p_state.recording then return end
@@ -379,15 +626,9 @@ local function stop_recording(player)
     return
   end
 
-  if not is_straight_path(p_state.path) then
-    player.print({"message.pbb-not-straight-path"})
-    reset_placement_state(player)
-    return
-  end
-  
   player.print({"message.pbb-recording-stopped"})
   
-  -- 配置処理の即時実行
+  -- 配置処理の実行
   confirm_placement(player)
 end
 
@@ -402,12 +643,10 @@ local function toggle_gui_and_recording(player)
   local window = player.gui.screen.pbb_main_window
   
   if not window then
-    -- GUIを開く（待機状態）
     get_or_create_gui(player)
     update_gui(player)
     player.set_shortcut_toggled("pbb-toggle-recording", true)
   else
-    -- GUIを閉じる
     local p_state = storage.players[player.index]
     if p_state.recording then
       cancel_action(player)
@@ -425,6 +664,23 @@ script.on_event(defines.events.on_lua_shortcut, function(event)
     local player = game.get_player(event.player_index)
     if not player then return end
     toggle_gui_and_recording(player)
+  end
+end)
+
+-- GUIをEscキーや閉じるボタンで閉じた時のイベント
+script.on_event(defines.events.on_gui_closed, function(event)
+  if event.element and event.element.name == "pbb_main_window" then
+    local player = game.get_player(event.player_index)
+    if player then
+      local p_state = storage.players[player.index]
+      if p_state.recording then
+        cancel_action(player)
+      end
+      if event.element.valid then
+        event.element.destroy()
+      end
+      player.set_shortcut_toggled("pbb-toggle-recording", false)
+    end
   end
 end)
 
@@ -500,8 +756,7 @@ script.on_event(defines.events.on_built_entity, function(event)
       
       table.insert(p_state.path, {
         x = entity.position.x,
-        y = entity.position.y,
-        direction = entity.direction
+        y = entity.position.y
       })
     end
   end
