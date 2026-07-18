@@ -460,11 +460,6 @@ local function reset_placement_state(player)
     p_state.path = {}
   end
   
-  -- openedが設定されていたら自動的にクリアする
-  if player.opened and player.opened.name == "pbb_main_window" then
-    player.opened = nil
-  end
-  
   local window = player.gui.screen.pbb_main_window
   player.set_shortcut_toggled("pbb-toggle-recording", window ~= nil)
   update_gui(player)
@@ -518,6 +513,7 @@ local function confirm_placement(player)
   local surface = player.surface
 
   -- 3. 各並列列のタイル生成
+  -- 外側ループをcol（基準に近い列順）、内側を始点から終点へのタイル順にする
   local all_parallel_tiles = {}
   for col = 1, count - 1 do
     local col_tiles, err3 = generate_parallel_path(segments, col, side)
@@ -532,7 +528,7 @@ local function confirm_placement(player)
     end
   end
 
-  -- 重複タイルの排除
+  -- 重複タイルの排除（順序を維持したままユニーク化）
   local seen = {}
   local unique_tiles = {}
   for _, tile in ipairs(all_parallel_tiles) do
@@ -559,39 +555,46 @@ local function confirm_placement(player)
     return true
   end
 
+  -- 5. 配置実行
+  local placed_entities = 0
+  local placed_ghosts = 0
+  
   if placement == "normal" then
-    -- 通常配置モード：アイテム消費チェック
-    local required_count = #place_positions
+    -- 通常配置モード：手持ちがある分だけ実体化し、残りはゴースト（ブループリント）化する
     local available_count = player.get_item_count(belt_type)
-    if available_count < required_count then
-      player.print({"message.pbb-insufficient-items", required_count, {"entity-name." .. belt_type}, available_count})
-      p_state.placing = false
-      reset_placement_state(player)
-      return false
-    end
-
-    -- アイテム消費
-    player.remove_item{name = belt_type, count = required_count}
     
-    -- 実体配置
-    local placed = 0
     for _, tile in ipairs(place_positions) do
-      local ent = surface.create_entity{
-        name = belt_type,
-        position = {x = tile.x, y = tile.y},
-        direction = tile.direction,
-        force = player.force,
-        raise_built = true
-      }
-      if ent then
-        placed = placed + 1
+      if available_count > 0 then
+        -- 手持ちアイテムがある ➜ 実体を配置
+        local ent = surface.create_entity{
+          name = belt_type,
+          position = {x = tile.x, y = tile.y},
+          direction = tile.direction,
+          force = player.force,
+          raise_built = true
+        }
+        if ent then
+          placed_entities = placed_entities + 1
+          available_count = available_count - 1
+          player.remove_item{name = belt_type, count = 1}
+        end
+      else
+        -- アイテム切れ ➜ 残りはゴースト（ブループリント）配置
+        local ghost = surface.create_entity{
+          name = "entity-ghost",
+          inner_name = belt_type,
+          position = {x = tile.x, y = tile.y},
+          direction = tile.direction,
+          force = player.force,
+          raise_built = true
+        }
+        if ghost then
+          placed_ghosts = placed_ghosts + 1
+        end
       end
     end
-    player.print({"message.pbb-entities-placed", placed})
-
   else
     -- ゴースト配置モード
-    local placed = 0
     for _, tile in ipairs(place_positions) do
       local ghost = surface.create_entity{
         name = "entity-ghost",
@@ -602,10 +605,17 @@ local function confirm_placement(player)
         raise_built = true
       }
       if ghost then
-        placed = placed + 1
+        placed_ghosts = placed_ghosts + 1
       end
     end
-    player.print({"message.pbb-ghosts-placed", placed})
+  end
+
+  -- 結果報告
+  if placed_entities > 0 then
+    player.print({"message.pbb-entities-placed", placed_entities})
+  end
+  if placed_ghosts > 0 then
+    player.print({"message.pbb-ghosts-placed", placed_ghosts})
   end
 
   p_state.placing = false
