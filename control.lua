@@ -515,7 +515,6 @@ local function start_recording(player)
   p_state.belt_type = nil
   p_state.path = {}
 
-  player.print({"message.pbb-recording-started"})
   update_gui(player)
 end
 
@@ -649,14 +648,6 @@ local function confirm_placement(player)
     end
   end
 
-  -- 結果報告
-  if placed_entities > 0 then
-    player.print({"message.pbb-entities-placed", placed_entities})
-  end
-  if placed_ghosts > 0 then
-    player.print({"message.pbb-ghosts-placed", placed_ghosts})
-  end
-
   p_state.placing = false
   reset_placement_state(player)
   return true
@@ -675,15 +666,12 @@ local function stop_recording(player)
     return
   end
 
-  player.print({"message.pbb-recording-stopped"})
-
   -- 配置処理の実行
   confirm_placement(player)
 end
 
 -- キャンセル処理
 local function cancel_action(player)
-  player.print({"message.pbb-placement-cancelled"})
   reset_placement_state(player)
 end
 
