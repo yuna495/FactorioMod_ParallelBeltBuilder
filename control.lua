@@ -124,7 +124,7 @@ local function get_or_create_gui(player)
     flow_actions.style.horizontal_spacing = 8
     local btn_start = flow_actions.add{type = "button", name = "pbb_start", caption = "Start"}
     btn_start.style.width = 75
-    local btn_stop = flow_actions.add{type = "button", name = "pbb_stop", caption = "Stop"}
+    local btn_stop = flow_actions.add{type = "button", name = "pbb_stop", caption = "Build"}
     btn_stop.style.width = 75
     local btn_cancel = flow_actions.add{type = "button", name = "pbb_cancel", caption = "Cancel"}
     btn_cancel.style.width = 75

@@ -22,5 +22,5 @@ A Factorio 2.0 mod that allows you to easily place multiple parallel transport b
 2. Configure **Count** (2-16), **Side** (Left/Right), and **Placement** (Normal/Ghost) before starting.
 3. Click the **`Start`** button to begin recording.
 4. Place your reference transport belts in the world (either manually or by dragging).
-5. Click the **`Stop`** button. The parallel belts/ghosts will be generated instantly.
+5. Click the **`Build`** button. The parallel belts/ghosts will be generated instantly.
 6. If you want to abort the current recording without placing anything, click the **`Cancel`** button or press the **`Esc`** key.

@@ -98,9 +98,9 @@ local function get_or_create_gui(player)
     local lbl_side = flow_side.add{type = "label", caption = "Side: "}
     lbl_side.style.width = 80
     local btn_left = flow_side.add{type = "button", name = "pbb_side_left", caption = "Left"}
-    btn_left.style.width = 60
+    btn_left.style.width = 75
     local btn_right = flow_side.add{type = "button", name = "pbb_side_right", caption = "Right"}
-    btn_right.style.width = 60
+    btn_right.style.width = 75
 
     -- Placement Info
     local flow_place = window.add{type = "flow", name = "flow_place", direction = "horizontal"}
@@ -109,9 +109,9 @@ local function get_or_create_gui(player)
     local lbl_place = flow_place.add{type = "label", caption = "Placement: "}
     lbl_place.style.width = 80
     local btn_normal = flow_place.add{type = "button", name = "pbb_place_normal", caption = "Normal"}
-    btn_normal.style.width = 60
+    btn_normal.style.width = 75
     local btn_ghost = flow_place.add{type = "button", name = "pbb_place_ghost", caption = "Ghost"}
-    btn_ghost.style.width = 60
+    btn_ghost.style.width = 75
 
     -- Divider
     local line = window.add{type = "line", direction = "horizontal"}
@@ -123,11 +123,11 @@ local function get_or_create_gui(player)
     flow_actions.style.vertical_align = "center"
     flow_actions.style.horizontal_spacing = 8
     local btn_start = flow_actions.add{type = "button", name = "pbb_start", caption = "Start"}
-    btn_start.style.width = 65
-    local btn_stop = flow_actions.add{type = "button", name = "pbb_stop", caption = "Stop"}
-    btn_stop.style.width = 65
+    btn_start.style.width = 75
+    local btn_stop = flow_actions.add{type = "button", name = "pbb_stop", caption = "Build"}
+    btn_stop.style.width = 75
     local btn_cancel = flow_actions.add{type = "button", name = "pbb_cancel", caption = "Cancel"}
-    btn_cancel.style.width = 65
+    btn_cancel.style.width = 75
 
     -- EscキーでGUIを閉じるための紐付け
     player.opened = window
@@ -170,12 +170,12 @@ local function update_gui(player)
   window.flow_count.count_label.caption = tostring(p_state.count)
 
   -- Side toggle state & style
-  update_toggle_button(window.flow_side.pbb_side_left, p_state.side == "left", 60)
-  update_toggle_button(window.flow_side.pbb_side_right, p_state.side == "right", 60)
+  update_toggle_button(window.flow_side.pbb_side_left, p_state.side == "left", 75)
+  update_toggle_button(window.flow_side.pbb_side_right, p_state.side == "right", 75)
 
   -- Placement toggle state & style
-  update_toggle_button(window.flow_place.pbb_place_normal, p_state.placement == "normal", 60)
-  update_toggle_button(window.flow_place.pbb_place_ghost, p_state.placement == "ghost", 60)
+  update_toggle_button(window.flow_place.pbb_place_normal, p_state.placement == "normal", 75)
+  update_toggle_button(window.flow_place.pbb_place_ghost, p_state.placement == "ghost", 75)
 
   local is_recording = p_state.recording
   local is_placing = p_state.placing
