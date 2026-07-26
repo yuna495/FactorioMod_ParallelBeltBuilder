@@ -1,0 +1,8 @@
+# updated: 2026-07-26T21:28+09:00
+# Changelog
+
+## Version: 1.0.3
+
+* Removed the `Start` button. Recording now starts automatically when the first reference belt is placed while the GUI is open.
+* Added direct numeric input for the parallel belt count, in addition to the existing `+` and `-` buttons.
+* In editor mode and cheat mode, Normal placement now builds physical belts without checking or consuming inventory items.
