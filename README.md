@@ -1,27 +1,49 @@
 # Parallel Belt Builder
 
-A Factorio 2.0 mod that allows you to easily place multiple parallel transport belts by simply building a single reference belt path.
+A Factorio 2.0 mod for drawing a virtual belt path and placing 1 to 16 planned belt lanes at once.
+
+Parallel Belt Builder is no longer based on recording an already-built reference belt. Instead, it gives you a dedicated drawing tool: draw a virtual path, preview the resulting belt group, then confirm placement.
 
 ## Features
 
-* **Parallel Placement (2 to 16 Belts)**: Adjust the total number of parallel belts you want to build, ranging from 2 up to 16.
-* **Direct Count Input**: Set the belt count with the `+` / `-` buttons or type a number directly into the count field.
-* **Automatic Belt Detection**: Automatically detects the type of transport belt you placed first (Yellow, Red, Blue, or custom belts from other mods) and replicates it across all parallel lines.
-* **Flexible Offsetting**: Choose to build parallel lines on either the **Left** or **Right** side relative to the reference belt's movement direction.
-* **Placement Modes**:
-  * **Normal**: Places physical belts using items from your inventory. If you run out of items mid-build, the mod automatically places the remaining belts as **ghosts (blueprints)**, prioritizing placement from inner-to-outer and start-to-end. In editor mode or cheat mode, Normal placement builds physical belts without checking or consuming inventory items.
-  * **Ghost**: Places entity ghosts for all parallel lines without consuming any items.
-* **90-Degree Corners & Complex Paths**: Handles right-angle (90-degree) corners and multi-segment layouts. It automatically calculates intersection coordinates to trim/extend inner and outer curves for seamless connections.
-* **Obstacle Skipping**: Automatically skips placements on water or colliding structures, only placing belts on valid buildable ground.
-* **Robust Validation**: Detects and warns you about invalid layouts (branches, merges, disconnected lines, loops, 180-degree U-turns, or path collapse due to extremely tight inner corners) and prevents faulty placements.
-* **On-the-fly Corrections**: If you make a mistake while building the reference path, simply deconstruct/remove the incorrect belts before pressing **`Build`**. The mod will automatically skip the deleted coordinates as long as the remaining layout forms a valid continuous path.
-* **Hotkeys & Esc Integration**: Toggle the GUI at any time using **`Ctrl + Alt + Q`** (rebindable under Controls > Mod controls). Closing the GUI discards the current reference path.
+* **1 to 16 lanes**: Use it as a single-belt drawing tool or expand the path into a parallel belt group.
+* **Virtual path drawing**: The dedicated tool uses a dummy belt while drawing, but the dummy entity is immediately removed and is not left in the world.
+* **L-shaped segments**: Diagonal drags are converted into horizontal-first or vertical-first L-shaped belt paths.
+* **Anchors**: Press the anchor key to fix the current segment and continue drawing from that point.
+* **Automatic belt selection**: If you start PBB while holding an item that places a transport belt, that belt is selected.
+* **Mod belt support**: Transport belt prototypes are discovered dynamically instead of using a fixed Yellow/Red/Blue list.
+* **Per-lane underground planning**: Each generated lane is checked independently. If a lane cannot place normal belts through an obstacle, PBB attempts an underground-belt section for that lane only.
+* **Blocked preview**: Positions that cannot be placed normally and cannot be undergrounded are marked as blocked.
+* **Lightweight preview**: Normal path preview uses line rendering only. Underground entrances/exits and blocked positions are shown as markers.
+* **Normal and Ghost placement**:
+  * Normal places physical belts when the required item is available, and places ghosts for individual entities when items are missing.
+  * Ghost places ghosts for the planned entities.
 
-## How to Use
+## Controls
 
-1. Open the settings GUI by clicking the **Parallel Belt Builder** shortcut icon or pressing **`Ctrl + Alt + Q`**.
-2. Configure **Count** (2-16, using the buttons or direct numeric input), **Side** (Left/Right), and **Placement** (Normal/Ghost).
-3. Place your reference transport belts in the world (either manually or by dragging). Recording starts automatically from the first belt placed while the GUI is open.
-4. Click the **`Build`** button. The parallel belts/ghosts will be generated instantly, and the GUI stays open for the next path.
-5. If you want to discard the current reference path without placing anything, click **`Clear`**.
-6. Closing the GUI discards the current reference path.
+* `Ctrl + Alt + Q`: Toggle Parallel Belt Builder.
+* `F`: Toggle the current segment's L-bend mode.
+* `R`: Anchor the current segment.
+* Factorio clear-cursor control: Cancel drawing.
+* Confirm and Clear are GUI buttons.
+
+All mod controls can be changed in Factorio's control settings.
+
+## How To Use
+
+1. Hold a transport belt item if you want PBB to select that belt automatically.
+2. Open Parallel Belt Builder with the shortcut button or `Ctrl + Alt + Q`.
+3. Set Belt, Count, Side, and Placement.
+4. Drag with the PBB tool to draw a virtual belt path.
+5. Press `F` to switch the current L-shaped segment between horizontal-first and vertical-first.
+6. Press `R` to anchor the current segment and continue from that point.
+7. Check the preview.
+8. Click Confirm to place the full plan.
+
+Count `1` uses the same flow and places a single planned belt lane.
+
+## Notes
+
+PBB does not automatically remove or replace existing entities. Existing same-type and same-direction transport belts, or equivalent transport-belt ghosts, are reused without item cost. Other entities are treated as obstacles and may be crossed with underground belts if a valid underground section can be created.
+
+Blocked positions are intentionally left unplaced when confirmed.
