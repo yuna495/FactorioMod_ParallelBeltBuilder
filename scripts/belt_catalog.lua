@@ -3,14 +3,34 @@ local constants = require("scripts.constants")
 local catalog = {}
 
 local function prototype_name(proto)
-  if type(proto) == "table" then
-    return proto.name
+  if not proto then
+    return nil
   end
-  return proto
+  if type(proto) == "string" then
+    return proto
+  end
+
+  local ok, name = pcall(function()
+    return proto.name
+  end)
+  if ok then
+    return name
+  end
+  return nil
 end
 
 local function first_item_name(entity_proto)
-  local items = entity_proto and entity_proto.items_to_place_this
+  if not entity_proto then
+    return nil
+  end
+
+  local ok, items = pcall(function()
+    return entity_proto.items_to_place_this
+  end)
+  if not ok then
+    return nil
+  end
+
   if items and items[1] then
     return items[1].name
   end

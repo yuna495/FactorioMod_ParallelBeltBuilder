@@ -71,6 +71,24 @@ local function endpoint_is_clear(entry)
     and entry.state == constants.STATE_NORMAL
 end
 
+local function endpoint_can_be_underground(surface, force, underground_name, entry, belt_to_ground_type)
+  if not endpoint_is_clear(entry) then return false end
+
+  local params = {
+    name = underground_name,
+    position = position_of(entry),
+    direction = entry.direction,
+    force = force,
+    build_check_type = defines.build_check_type.manual_ghost
+  }
+
+  if belt_to_ground_type == "output" then
+    params.direction = (entry.direction + 8) % 16
+  end
+
+  return surface.can_place_entity(params)
+end
+
 local function interior_can_be_undergrounded(entries, start_index, end_index)
   for i = start_index, end_index do
     local entry = entries[i]
@@ -83,18 +101,6 @@ local function interior_can_be_undergrounded(entries, start_index, end_index)
     end
   end
   return true
-end
-
-local function can_place_underground(surface, force, underground_name, entry)
-  if not endpoint_is_clear(entry) then return false end
-
-  return surface.can_place_entity{
-    name = underground_name,
-    position = position_of(entry),
-    direction = entry.direction,
-    force = force,
-    build_check_type = defines.build_check_type.manual_ghost
-  }
 end
 
 local function group_segment_indices(entries)
@@ -111,25 +117,42 @@ local function group_segment_indices(entries)
   return groups
 end
 
-local function find_underground_candidate(surface, force, entries, group, blocked_index, belt_info)
+local function blocked_run(entries, group, blocked_index)
+  local first = blocked_index
+  local last = blocked_index
+
+  while first > group.first and entries[first - 1].state == constants.STATE_BLOCKED do
+    first = first - 1
+  end
+
+  while last < group.last and entries[last + 1].state == constants.STATE_BLOCKED do
+    last = last + 1
+  end
+
+  return first, last
+end
+
+local function find_underground_candidate(surface, force, entries, group, blocked_first, blocked_last, belt_info)
   local max_distance = belt_info.max_underground_distance
   local underground_name = belt_info.underground_name
   if not (underground_name and max_distance) then
     return nil, nil
   end
 
-  for entry_index = blocked_index - 1, group.first, -1 do
-    if blocked_index - entry_index > max_distance + 1 then
+  local blocked_direction = entries[blocked_first].direction
+
+  for entry_index = blocked_first - 1, group.first, -1 do
+    if blocked_first - entry_index > max_distance + 1 then
       break
     end
 
     local entry = entries[entry_index]
-    if entry.direction ~= entries[blocked_index].direction then
+    if entry.direction ~= blocked_direction then
       break
     end
 
-    if can_place_underground(surface, force, underground_name, entry) then
-      for exit_index = blocked_index + 1, group.last do
+    if endpoint_can_be_underground(surface, force, underground_name, entry, "input") then
+      for exit_index = blocked_last + 1, group.last do
         local underground_nodes = exit_index - entry_index - 1
         if underground_nodes > max_distance then
           break
@@ -140,7 +163,7 @@ local function find_underground_candidate(surface, force, entries, group, blocke
           break
         end
 
-        if can_place_underground(surface, force, underground_name, exit)
+        if endpoint_can_be_underground(surface, force, underground_name, exit, "output")
           and interior_can_be_undergrounded(entries, entry_index + 1, exit_index - 1)
         then
           return entry_index, exit_index
@@ -183,12 +206,21 @@ local function underground_lane(surface, force, lane, belt_info)
     while i <= group.last do
       local entry = lane.entries[i]
       if entry and entry.state == constants.STATE_BLOCKED then
-        local entry_index, exit_index = find_underground_candidate(surface, force, lane.entries, group, i, belt_info)
+        local blocked_first, blocked_last = blocked_run(lane.entries, group, i)
+        local entry_index, exit_index = find_underground_candidate(
+          surface,
+          force,
+          lane.entries,
+          group,
+          blocked_first,
+          blocked_last,
+          belt_info
+        )
         if entry_index and exit_index then
           apply_underground(lane.entries, entry_index, exit_index, belt_info)
           i = exit_index + 1
         else
-          i = i + 1
+          i = blocked_last + 1
         end
       else
         i = i + 1
