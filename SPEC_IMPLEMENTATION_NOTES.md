@@ -1,89 +1,67 @@
-# Parallel Belt Builder 仕様実装メモ
+# Parallel Belt Builder Implementation Notes
 
-本ドキュメントは、Parallel Belt Builderの実装における仕様上の不明点と、それを解決するために置いた仮定・前提条件を記録するものです。
+`SPEC.md` is the source of truth. This file only records implementation choices
+that help keep the current code aligned with that specification.
 
----
+## Drawing Tool
 
-## 第1・第2段階の実装メモ
+PBB uses a hidden selection-tool cursor rather than recording real belts. The
+tool uses a transparent dummy entity for initial interaction and a dummy
+transport-belt for drag position events. Dummy entities are destroyed
+immediately and must not remain as real belts in the world.
 
-### 1. 展開方向について
+The implementation was designed with Belt Draw as a reference for interaction
+ideas, but no Belt Draw source code is copied into this repository.
 
-* **仮定・設計**: 展開方向は基準ベルトの進行方向に対する「左側（Left）」または「右側（Right）」です。
-  * 北向きの右側は東方向、左側は西方向へオフセットされます。他の向きも同様に90度直交する軸へ展開します。
+## Runtime State
 
-### 2. 直線経路の判定について
+Per-player state is stored in `storage.players[player_index]`. Current runtime
+modes are:
 
-* **仮定・設計**: すべてのベルトが同一の向きを持ち、同一軸（南北なら同一X、東西なら同一Y）に並んでいることを直線経路と判定します。
+* `idle`
+* `drawing`
+* `placing`
 
-### 3. 重複した配置の処理
+`placing` is a valid current state during confirmation and must not be treated
+as an obsolete recording-mode value during ordinary normalization.
 
-* **仮定・設計**: 同一座標への記録は重複排除（ユニーク化）を行い、1つ分のベルトとして処理します。これにより、重複配置によるパフォーマンス低下やエラーを防ぎます。
+Old recording-mode fields such as `path`, `recording`, `placing`, and
+`belt_type` are treated as legacy save data and are removed during migration.
 
-### 4. 配置不能なタイルの定義とスキップ
+## Geometry
 
-* **仮定・設計**: `LuaSurface.can_place_entity` で検証し、配置不能な水の上や他の実体のある建物の位置は自動的にスキップし、アイテムも消費しません。
+Raw anchored segments are expanded into axis-aligned segments. After expansion,
+consecutive segments with the same direction, on the same line, and sharing an
+endpoint are normalized into a single internal segment. Anchor operations remain
+visible to the user as editing actions; this normalization is only for internal
+geometry.
 
-### 5. 通常配置（Normal）のアイテム消費と不足時のゴースト化
+Lane generation rejects geometric collapse separately from world placement
+collisions. Tile reuse within a lane or between generated lanes is treated as a
+path collapse and rejects the plan before placement.
 
-* **設計**:
-  * 通常配置（Normal）の際、プレイヤーのインベントリに十分なベルトアイテムがない場合でも、配置を完全に中止するのではなく、**手持ちアイテムがある分だけ実体を配置し、残りはゴースト（ブループリント）として配置**します。
-  * 実体として配置するタイルの優先順位は、**「基準経路に近い列（colが小さい列）」を最優先とし、さらに各列内では「ベルトの始点から終点に向かう順（進行順）」で優先配置**します。
-  * 手持ちが切れたタイル以降は、すべて自動的にエンティティゴースト（`entity-ghost`）として作成されます。
+## Belt Catalog
 
----
+Transport-belt prototypes are discovered dynamically, but GUI candidates must
+have a valid placement item from `items_to_place_this`. PBB dummy belts and
+other non-user-placeable internal prototypes are excluded from the GUI list.
 
-## 第3段階の実装メモ
+Prototype discovery is cached at runtime and invalidated on initialization and
+configuration changes.
 
-### 1. 基準経路の解析方法
+## Placement
 
-* **設計**:
-  * ドラッグ敷設によるイベントの発生順序や向きのブレに依存しないよう、記録されたベルト座標をもとに隣接接続関係を構築します。
-  * プレイヤーがドラッグ敷設した際、以前に置かれたベルトがゲームエンジンによって自動回転されるため、記録時は座標のみを保持します。
-  * 記録終了（Stop recording）時にサーフェスから直接最新のベルトエンティティの向き（`direction`）および名前（`name`）を再取得し、接続トポロジーを構築します。
-  * 各ベルトノードについて、最新の向きに対応する隣接タイルへの「出力（outgoing）」および後方からの「入力（incoming）」をマッピングします。
-  * 入次数が0のものを「始点（start）」、出次数が0のものを「終点（end）」と特定し、始点からポインタを辿ることで順序ソートされた `sorted_path` を復元します。
-  * **バリデーション**:
-    * 入次数または出次数が2以上のノードがあれば「分岐・合流あり」としてエラーとします。
-    * 始点や終点が1つでない場合（非連続な複数経路、孤立ループ、完全な閉じた環状ループ）は「不正な経路」としてエラーとします。
-    * 走査されたパスの長さが総ノード数と一致しない場合（孤立した別経路の混在など）もエラーとします。
-    * 確定時点で基準ベルトが撤去されていたり、別種類（混在）になっていた場合は「基準経路変更エラー」として処理します。
+Normal placement uses physical entities when possible. If an entry has no
+placement item or the player lacks that item, it falls back to a ghost for that
+entry. Editor and cheat-mode placement may place physical entities without a
+placement item.
 
-### 2. 曲がり角のオフセット計算方法
+Existing same-name, same-direction belts and equivalent belt ghosts are reused
+without consuming items.
 
-* **設計**:
-  * ソートされたパスを連続する同じ方向の「直線区間（Segment）」にグループ化します。
-  * 各直線区間の中心線について、指定された列番号 `col` (1 〜 count-1) と展開方向 `side` ("left" / "right") に応じてオフセットした「新しい無限直線」を想定します。
-  * 隣接する区間同士は必ず直角（90度）に交差するため、オフセットされた直線区間同士の交差点を頂点 `V_i` として一意に算出します。
-    * 垂直（X一定）と水平（Y一定）の直線が交差するため、交点座標はそれぞれのオフセット座標の組み合わせ `(x_offset, y_offset)` になります。
-  * オフセット経路の始点と終点は、それぞれ基準経路の始点と終点にオフセットベクトルを加算して決定します。
+## Preview Lifecycle
 
-### 3. 内側・外側経路 of 接続規則と逆行検知
-
-* **接続規則**:
-  * 各直線区間について、頂点 `V_i` から `V_{i+1}` までの直線上をベルトで埋めます。
-  * タイルの重複を避けるため、終点 `V_{i+1}` は次の区間の始点として生成し、向きは次の区間の向き（曲がった後の進行方向）をアサインします。これにより、ゲーム内と同様の美しい直角曲がり接続が自動生成されます。
-  * **逆行（Collapse）検知**:
-    * 内側のきつい曲がりにより、オフセット後の頂点 `V_i` から `V_{i+1}` への進行ベクトルが、元の直線区間の進行方向と「逆向き」（内積がマイナス）になってしまうケース（内側経路の崩壊）を検知した場合、配置を安全に中止し、「経路が崩壊しました」と警告します。
-
-### 4. 対応しない経路形状
-
-* **仕様**:
-  * 分岐、合流、環状ループ、非連続、180度の折り返し（Uターン）、および内側経路の崩壊を引き起こすきつい曲がり角は非対応とし、配置をスキップします。
-
-### 5. 状態遷移の管理
-
-* **設計**:
-  * 状態を `idle` （待機）、`recording` （記録中）、`placing` （配置中・重複操作ロック）の3状態に厳密に分類しました。
-  * 記録（`Stop recording`）をクリックすると即座に `placing` 状態を経て配置を確定させ、完了またはエラー時に安全に `idle` へ戻るようにしています。
-
-### 6. パフォーマンス上の考慮
-
-* **設計**:
-  * 毎tickごとの経路計算や描画は一切行わず、プレイヤーが `Stop recording` を押した時点でのみ、ソート・グループ化・交点計算・配置可能性チェックの重い処理を1回だけ実行します。
-  * グローバル空間 `storage` には LuaPlayer や LuaEntity などのゲームオブジェクトを一切保存せず、位置・方向・文字列名のみを保持するため、セーブ・ロードの整合性とマルチプレイヤーでのパフォーマンスは常に最高レベルで維持されます。
-
-### 7. Undo対応の技術調査
-
-* **調査結果**:
-  * Factorioの公式APIにおいて、Luaスクリプトの `create_entity` によって生成された実体エンティティを、標準の「取り消し（Ctrl+Z）」キューへ手動で登録するための正式なAPIは現在提供されていません。
-  * このため、第3段階では標準Undoへの登録および独自のUndo機能の提供は見送り、プレイヤーが手動で解体プランナー等を使用して取り消しを行う運用とします。
+Preview render objects are per-player and are destroyed on Clear, Cancel, GUI
+close, player removal, surface change, and player leaving the game. The current
+plan can remain in storage after a player leaves; when the player rejoins, the
+GUI and preview are regenerated if a plan is still present.

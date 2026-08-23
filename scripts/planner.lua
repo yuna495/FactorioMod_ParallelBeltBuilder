@@ -8,6 +8,10 @@ local function key_for(entry)
   return string.format("%d,%d", math.floor(entry.x), math.floor(entry.y))
 end
 
+local function key_for_tile(tile)
+  return string.format("%d,%d", math.floor(tile.x), math.floor(tile.y))
+end
+
 local function position_of(entry)
   return {x = entry.x, y = entry.y}
 end
@@ -181,12 +185,12 @@ local function apply_underground(entries, entry_index, exit_index, belt_info)
 
   entry.kind = constants.KIND_UNDERGROUND_INPUT
   entry.prototype = belt_info.underground_name
-  entry.item_name = belt_info.underground_item_name or belt_info.underground_name
+  entry.item_name = belt_info.underground_item_name
   entry.state = constants.STATE_NORMAL
 
   exit.kind = constants.KIND_UNDERGROUND_OUTPUT
   exit.prototype = belt_info.underground_name
-  exit.item_name = belt_info.underground_item_name or belt_info.underground_name
+  exit.item_name = belt_info.underground_item_name
   exit.state = constants.STATE_NORMAL
 
   for i = entry_index + 1, exit_index - 1 do
@@ -278,11 +282,26 @@ function planner.build(player, p_state)
     entries = {},
     line_lanes = {}
   }
+  local occupied_by_lane = {}
 
   for lane_index = 0, p_state.count - 1 do
     local tiles, lane_err = geometry.generate_lane(axis_segments, lane_index, p_state.side)
     if not tiles then
       return nil, lane_err
+    end
+
+    local lane_ok, lane_collision_err = geometry.validate_lane_tiles(tiles)
+    if not lane_ok then
+      return nil, lane_collision_err
+    end
+
+    for _, tile in ipairs(tiles) do
+      local key = key_for_tile(tile)
+      local existing_lane = occupied_by_lane[key]
+      if existing_lane and existing_lane ~= lane_index + 1 then
+        return nil, "message.pbb-path-collapse-warning"
+      end
+      occupied_by_lane[key] = lane_index + 1
     end
 
     local lane = {

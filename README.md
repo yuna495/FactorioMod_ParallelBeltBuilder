@@ -25,6 +25,7 @@ Parallel Belt Builder is no longer based on recording an already-built reference
 * `F`: Toggle the current segment's L-bend mode.
 * `R`: Anchor the current segment.
 * Factorio clear-cursor control: Cancel drawing.
+* `Draw`: Re-acquire the PBB drawing tool after cancelling.
 * Confirm and Clear are GUI buttons.
 
 All mod controls can be changed in Factorio's control settings.
@@ -41,6 +42,8 @@ All mod controls can be changed in Factorio's control settings.
 8. Click Confirm to place the full plan.
 
 Count `1` uses the same flow and places a single planned belt lane.
+
+Cancel clears the current plan and cursor while leaving the GUI open. Click Draw to resume drawing without closing and reopening PBB. Clear removes the current plan and immediately returns the drawing tool.
 
 ## Notes
 

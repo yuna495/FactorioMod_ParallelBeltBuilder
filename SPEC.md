@@ -23,11 +23,9 @@ Parallel Belt Builder は、専用ツールで仮想的な搬送ベルト経路�
 
 ### 1.3 現行実装との関係
 
-この仕様書は、次期仕様の source of truth とする。
+この仕様書は、Parallel Belt Builder の source of truth とする。
 
-現在の実装コードおよび README には、実在する基準ベルトを記録して残りの並列ベルトを生成する旧仕様が残っている。今回の仕様改訂では実装コード、README、locale、data.lua は変更しないため、実装と仕様は一時的に不一致になる。
-
-以後の実装タスクでは、この仕様書に合わせて旧実装を置き換える。
+実装コード、README、locale、data.lua などの関連ファイルは、この仕様書と矛盾しない状態を維持する。
 
 ## 2. 対象環境
 
@@ -181,6 +179,8 @@ Count = N のとき、確定時には N 本すべてが配置対象となる。
 
 GUI のベルト候補は Yellow / Red / Blue などを固定列挙せず、利用可能な transport-belt prototype から取得する方針とする。
 
+GUI で選択可能なベルトは、プレイヤーが配置 item を通じて通常利用できる transport-belt を対象とする。PBB 内部用の dummy prototype や、配置 item を持たない非プレイヤー向け prototype は候補から除外する。
+
 Vanilla の以下のベルトは標準対応対象とする。
 
 * `transport-belt`
@@ -294,6 +294,7 @@ Count > 1 の場合、追加レーンは Side で指定された側へ展開す�
 * F: 現在編集中 Segment の L 字経路の曲がり方を切り替える
 * R: Anchor を確定する
 * Factorio 標準の clear-cursor 操作: Cancel
+* Draw: GUI ボタン。Cancel 後など、GUI を残したまま専用描画ツールを再取得して描画を再開する
 * Confirm: GUI ボタン
 * Clear: GUI ボタン
 
@@ -540,6 +541,10 @@ Factorio の `storage` で保存可能な LuaObject は利用可能とする。
 
 キャンセルまたはクリア時には、仮想経路、レーン、地下化判定、Blocked 表示、プレビューを破棄する。
 
+Cancel は Factorio 標準の clear-cursor 操作に対応し、GUI は残してよい。Cancel 後は Draw 操作によって専用描画ツールを再取得し、新しい経路の描画を再開できる。
+
+Clear は現在の計画を破棄したうえで、専用描画ツールを再取得し、そのまま新しい経路を描き始められるようにする。
+
 Mod 独自の配置後 Undo 機能は、この仕様では必須としない。
 
 ## 14. マルチプレイヤー
@@ -549,6 +554,7 @@ Mod 独自の配置後 Undo 機能は、この仕様では必須としない。
 * 配置処理はサーバー側で同期される
 * `storage` に保存する LuaObject は、保存可能性と `valid` 確認を前提に扱う
 * プレビュー用の一時オブジェクトは、プレイヤーごとの可視性と破棄タイミングを考慮する
+* プレイヤー離脱時はプレビュー用 RenderObject を破棄するが、未確定の計画状態は保持してよい。再参加時に計画が残っている場合は、GUI とプレビューを再生成する。
 
 初版からマルチプレイヤーで正常に動く構成を前提とする。
 

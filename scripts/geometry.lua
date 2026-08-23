@@ -53,6 +53,32 @@ local function add_axis_segment(segments, from, to, raw_index)
   })
 end
 
+local function can_merge_segments(prev, curr)
+  if not prev or not curr then return false end
+  if prev.direction ~= curr.direction then return false end
+  if not geometry.same_position(prev.to, curr.from) then return false end
+
+  if prev.is_vertical then
+    return math.abs(prev.from.x - curr.from.x) < 0.01
+  end
+  return math.abs(prev.from.y - curr.from.y) < 0.01
+end
+
+local function normalize_axis_segments(axis_segments)
+  local normalized = {}
+
+  for _, segment in ipairs(axis_segments or {}) do
+    local prev = normalized[#normalized]
+    if can_merge_segments(prev, segment) then
+      prev.to = copy_pos(segment.to)
+    else
+      table.insert(normalized, segment)
+    end
+  end
+
+  return normalized
+end
+
 function geometry.expand_raw_segment(raw, raw_index)
   local result = {}
   local from = raw.from
@@ -98,7 +124,7 @@ function geometry.axis_segments(raw_segments, current_start, current_end, curren
     end
   end
 
-  return axis
+  return normalize_axis_segments(axis)
 end
 
 local function tile_key(pos)
@@ -207,6 +233,18 @@ function geometry.generate_lane(axis_segments, lane_index, side)
   end
 
   return tiles
+end
+
+function geometry.validate_lane_tiles(tiles)
+  local seen = {}
+  for _, tile in ipairs(tiles or {}) do
+    local key = tile_key(tile)
+    if seen[key] then
+      return false, "message.pbb-path-collapse-warning", key
+    end
+    seen[key] = true
+  end
+  return true, nil, nil
 end
 
 function geometry.lane_line_segments(axis_segments, lane_index, side)

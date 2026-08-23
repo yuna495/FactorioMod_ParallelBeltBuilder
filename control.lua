@@ -109,6 +109,20 @@ local function give_tool(player)
   return true
 end
 
+local function begin_drawing(player)
+  local p_state = state.get(player.index)
+  if give_tool(player) then
+    p_state.mode = constants.MODE_DRAWING
+    gui.get_or_create(player)
+    gui.update(player)
+    refresh_shortcut(player)
+    return true
+  end
+  gui.update(player)
+  refresh_shortcut(player)
+  return false
+end
+
 local function open_pbb(player)
   local p_state = state.get(player.index)
   local cursor_belt = catalog.belt_from_cursor(player)
@@ -119,9 +133,7 @@ local function open_pbb(player)
   end
 
   gui.get_or_create(player)
-  if give_tool(player) then
-    p_state.mode = constants.MODE_DRAWING
-  end
+  begin_drawing(player)
   refresh_shortcut(player)
   rebuild_preview(player, p_state)
 end
@@ -270,10 +282,12 @@ local function confirm_plan(player)
 end
 
 script.on_init(function()
+  catalog.invalidate_cache()
   state.init()
 end)
 
 script.on_configuration_changed(function()
+  catalog.invalidate_cache()
   state.init()
   for _, player in pairs(game.players) do
     local p_state = state.get(player.index)
@@ -396,6 +410,19 @@ script.on_event(defines.events.on_player_left_game, function(event)
   end
 end)
 
+script.on_event(defines.events.on_player_joined_game, function(event)
+  local player = player_of(event)
+  if not player then return end
+  local p_state = state.get(player.index)
+  if has_path(p_state) then
+    gui.get_or_create(player)
+    rebuild_preview(player, p_state)
+  else
+    gui.update(player)
+  end
+  refresh_shortcut(player)
+end)
+
 script.on_event(defines.events.on_gui_closed, function(event)
   if event.element and event.element.valid and event.element.name == "pbb_main_window" then
     local player = player_of(event)
@@ -462,10 +489,10 @@ script.on_event(defines.events.on_gui_click, function(event)
     gui.update(player)
   elseif element.name == "pbb_confirm" then
     confirm_plan(player)
+  elseif element.name == "pbb_draw" then
+    begin_drawing(player)
   elseif element.name == "pbb_clear" then
     cancel_plan(player, false)
-    give_tool(player)
-    state.get(player.index).mode = constants.MODE_DRAWING
-    gui.update(player)
+    begin_drawing(player)
   end
 end)

@@ -30,16 +30,30 @@ local function clamp_count(value)
   return count
 end
 
+local function has_legacy_plan_fields(p_state)
+  return p_state.path ~= nil
+    or p_state.recording ~= nil
+    or p_state.placing ~= nil
+    or p_state.belt_type ~= nil
+end
+
+local function clear_legacy_plan_fields(p_state)
+  if p_state.belt_type and not p_state.selected_belt_name then
+    p_state.selected_belt_name = p_state.belt_type
+  end
+
+  p_state.path = nil
+  p_state.recording = nil
+  p_state.placing = nil
+  p_state.belt_type = nil
+end
+
 function state.normalize(p_state)
   local default = default_player_state()
   for key, value in pairs(default) do
     if p_state[key] == nil then
       p_state[key] = value
     end
-  end
-
-  if p_state.belt_type and not p_state.selected_belt_name then
-    p_state.selected_belt_name = p_state.belt_type
   end
 
   p_state.count = clamp_count(p_state.count)
@@ -59,7 +73,7 @@ function state.normalize(p_state)
     p_state.mode = constants.MODE_IDLE
   end
 
-  if p_state.mode == "recording" or p_state.mode == "placing" then
+  if p_state.mode == "recording" then
     p_state.mode = constants.MODE_IDLE
   end
 
@@ -76,17 +90,31 @@ function state.normalize(p_state)
     p_state.preview_objects = {}
   end
 
-  p_state.path = nil
-  p_state.recording = nil
-  p_state.placing = nil
-  p_state.belt_type = nil
+  clear_legacy_plan_fields(p_state)
+end
+
+function state.migrate_runtime_state(p_state)
+  if has_legacy_plan_fields(p_state) then
+    p_state.segments = {}
+    p_state.current_start = nil
+    p_state.current_end = nil
+    p_state.drag_start = nil
+    p_state.plan = nil
+    clear_legacy_plan_fields(p_state)
+  end
+
+  if p_state.mode == constants.MODE_PLACING then
+    p_state.mode = constants.MODE_IDLE
+  end
+
+  state.normalize(p_state)
 end
 
 function state.init()
   storage.players = storage.players or {}
   for _, player in pairs(game.players) do
     storage.players[player.index] = storage.players[player.index] or default_player_state()
-    state.normalize(storage.players[player.index])
+    state.migrate_runtime_state(storage.players[player.index])
   end
 end
 

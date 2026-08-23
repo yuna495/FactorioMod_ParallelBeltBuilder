@@ -1,6 +1,7 @@
 local constants = require("scripts.constants")
 
 local catalog = {}
+local belt_cache = nil
 
 local function prototype_name(proto)
   if not proto then
@@ -50,7 +51,7 @@ function catalog.get_belt_info(belt_name)
   return {
     name = entity.name,
     localised_name = entity.localised_name,
-    item_name = first_item_name(entity) or entity.name,
+    item_name = first_item_name(entity),
     underground_name = underground and underground.name or nil,
     underground_item_name = first_item_name(underground),
     max_underground_distance = max_distance
@@ -58,22 +59,33 @@ function catalog.get_belt_info(belt_name)
 end
 
 function catalog.default_belt_name()
-  if prototypes.entity[constants.DEFAULT_BELT] then
+  local default = catalog.get_belt_info(constants.DEFAULT_BELT)
+  if default and default.item_name then
     return constants.DEFAULT_BELT
   end
 
-  for name, proto in pairs(prototypes.entity) do
-    if proto.type == "transport-belt" then
-      return name
-    end
+  for _, belt in ipairs(catalog.list_belts()) do
+    return belt.name
   end
   return nil
 end
 
-function catalog.list_belts()
+local function is_user_selectable_belt(name, proto)
+  if name == constants.DUMMY_BELT then return false end
+  if proto.type ~= "transport-belt" then return false end
+
+  local info = catalog.get_belt_info(name)
+  if not (info and info.item_name) then
+    return false
+  end
+
+  return true
+end
+
+local function build_belt_cache()
   local belts = {}
   for name, proto in pairs(prototypes.entity) do
-    if proto.type == "transport-belt" and name ~= constants.DUMMY_BELT then
+    if is_user_selectable_belt(name, proto) then
       table.insert(belts, {
         name = name,
         localised_name = proto.localised_name
@@ -84,6 +96,17 @@ function catalog.list_belts()
   return belts
 end
 
+function catalog.list_belts()
+  if not belt_cache then
+    belt_cache = build_belt_cache()
+  end
+  return belt_cache
+end
+
+function catalog.invalidate_cache()
+  belt_cache = nil
+end
+
 function catalog.belt_from_cursor(player)
   local stack = player.cursor_stack
   if not (stack and stack.valid and stack.valid_for_read) then
@@ -92,14 +115,15 @@ function catalog.belt_from_cursor(player)
 
   local item_proto = stack.prototype
   local place_result = item_proto and item_proto.place_result
-  if place_result and place_result.type == "transport-belt" then
+  if place_result and place_result.type == "transport-belt" and is_user_selectable_belt(place_result.name, place_result) then
     return place_result.name
   end
   return nil
 end
 
 function catalog.ensure_selected_belt(p_state)
-  if p_state.selected_belt_name and catalog.get_belt_info(p_state.selected_belt_name) then
+  local selected = p_state.selected_belt_name and catalog.get_belt_info(p_state.selected_belt_name)
+  if selected and selected.item_name then
     return p_state.selected_belt_name
   end
 
