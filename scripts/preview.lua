@@ -4,7 +4,6 @@ local preview = {}
 
 local LINE_COLOR = {r = 0.2, g = 0.9, b = 1.0, a = 0.85}
 local OUTER_LINE_COLOR = {r = 0.95, g = 0.85, b = 0.25, a = 0.85}
-local UNDERGROUND_TINT = {r = 0.35, g = 1.0, b = 0.55, a = 0.9}
 local BLOCKED_TINT = {r = 1.0, g = 0.15, b = 0.1, a = 0.95}
 local ANCHOR_TINT = {r = 0.35, g = 0.95, b = 0.45, a = 0.9}
 
@@ -54,7 +53,6 @@ local function draw_markers(player, p_state, plan)
         orientation = marker_orientation(entry.direction),
         x_scale = 0.45,
         y_scale = 0.45,
-        tint = UNDERGROUND_TINT,
         surface = player.surface,
         players = {player}
       })
