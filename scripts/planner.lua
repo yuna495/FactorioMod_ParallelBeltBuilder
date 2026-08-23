@@ -49,12 +49,6 @@ local function classify_entry(surface, force, belt_name, entry)
     end
   end
 
-  if #entities > 0 then
-    entry.state = constants.STATE_BLOCKED
-    entry.blocked_reason = "entity"
-    return
-  end
-
   local can_place = surface.can_place_entity{
     name = belt_name,
     position = pos,
@@ -67,7 +61,7 @@ local function classify_entry(surface, force, belt_name, entry)
     entry.state = constants.STATE_NORMAL
   else
     entry.state = constants.STATE_BLOCKED
-    entry.blocked_reason = "cannot-place"
+    entry.blocked_reason = (#entities > 0) and "entity-collision" or "cannot-place"
   end
 end
 
@@ -94,14 +88,9 @@ end
 local function can_place_underground(surface, force, underground_name, entry)
   if not endpoint_is_clear(entry) then return false end
 
-  local pos = position_of(entry)
-  if #find_entities(surface, pos) > 0 then
-    return false
-  end
-
   return surface.can_place_entity{
     name = underground_name,
-    position = pos,
+    position = position_of(entry),
     direction = entry.direction,
     force = force,
     build_check_type = defines.build_check_type.manual_ghost
