@@ -51,6 +51,7 @@ function catalog.get_belt_info(belt_name)
   return {
     name = entity.name,
     localised_name = entity.localised_name,
+    speed = entity.belt_speed or entity.speed or 0,
     item_name = first_item_name(entity),
     underground_name = underground and underground.name or nil,
     underground_item_name = first_item_name(underground),
@@ -88,11 +89,17 @@ local function build_belt_cache()
     if is_user_selectable_belt(name, proto) then
       table.insert(belts, {
         name = name,
-        localised_name = proto.localised_name
+        localised_name = proto.localised_name,
+        speed = proto.belt_speed or proto.speed or 0
       })
     end
   end
-  table.sort(belts, function(a, b) return a.name < b.name end)
+  table.sort(belts, function(a, b)
+    if a.speed ~= b.speed then
+      return a.speed < b.speed
+    end
+    return a.name < b.name
+  end)
   return belts
 end
 

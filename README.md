@@ -11,7 +11,7 @@ Parallel Belt Builder is no longer based on recording an already-built reference
 * **L-shaped segments**: Diagonal drags are converted into horizontal-first or vertical-first L-shaped belt paths.
 * **Anchors**: Press the anchor key to fix the current segment and continue drawing from that point.
 * **Automatic belt selection**: If you start PBB while holding an item that places a transport belt, that belt is selected.
-* **Mod belt support**: Transport belt prototypes are discovered dynamically instead of using a fixed Yellow/Red/Blue list.
+* **Mod belt support**: Transport belt prototypes are discovered dynamically and sorted by belt speed instead of using a fixed Yellow/Red/Blue list.
 * **Per-lane underground planning**: Each generated lane is checked independently. If a lane cannot place normal belts through an obstacle, PBB attempts an underground-belt section for that lane only.
 * **Blocked preview**: Positions that cannot be placed normally and cannot be undergrounded are marked as blocked.
 * **Lightweight preview**: Normal path preview uses line rendering only. Underground entrances/exits and blocked positions are shown as markers.

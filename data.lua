@@ -113,7 +113,7 @@ data:extend({
   {
     type = "sprite",
     name = "pbb-entryexit",
-    filename = "__ParallelBeltBuilder__/graphics/entryexit.png",
+    filename = "__ParallelBeltBuilder__/graphics/under.png",
     size = 64,
     priority = "extra-high-no-scale"
   },

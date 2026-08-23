@@ -39,6 +39,26 @@ local function existing_transport_belt_ghost(entity, belt_name, direction)
     and entity.direction == direction
 end
 
+local function is_transport_belt_ghost(entity)
+  if not (entity.valid and entity.name == "entity-ghost" and entity.ghost_name) then
+    return false
+  end
+
+  local ghost_proto = prototypes.entity[entity.ghost_name]
+  return ghost_proto and ghost_proto.type == "transport-belt"
+end
+
+local function conflicting_transport_belt(entity, belt_name, direction)
+  if existing_transport_belt(entity, belt_name, direction)
+    or existing_transport_belt_ghost(entity, belt_name, direction)
+  then
+    return false
+  end
+
+  return (entity.valid and entity.type == "transport-belt")
+    or is_transport_belt_ghost(entity)
+end
+
 local function classify_entry(surface, force, belt_name, entry)
   local pos = position_of(entry)
   local entities = find_entities(surface, pos)
@@ -49,6 +69,14 @@ local function classify_entry(surface, force, belt_name, entry)
     then
       entry.state = constants.STATE_EXISTING
       entry.existing = true
+      return
+    end
+  end
+
+  for _, entity in ipairs(entities) do
+    if conflicting_transport_belt(entity, belt_name, entry.direction) then
+      entry.state = constants.STATE_BLOCKED
+      entry.blocked_reason = "transport-belt-collision"
       return
     end
   end

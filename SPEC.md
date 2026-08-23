@@ -179,6 +179,8 @@ GUI のベルト候補は Yellow / Red / Blue などを固定列挙せず、利�
 
 GUI で選択可能なベルトは、プレイヤーが配置 item を通じて通常利用できる transport-belt を対象とする。PBB 内部用の dummy prototype や、配置 item を持たない非プレイヤー向け prototype は候補から除外する。
 
+GUI のベルト候補は、transport-belt prototype の速度が遅いものから速いものへ並べる。同じ速度の候補は、安定した順序になるよう prototype 名で並べる。
+
 Vanilla の以下のベルトは標準対応対象とする。
 
 * `transport-belt`
@@ -484,6 +486,8 @@ Ghost では、正常に配置可能な通常ベルトおよび underground-belt
 正常な既存経路として扱う位置には新規配置を行わず、アイテムも消費しない。
 
 それ以外の既存エンティティとの衝突は障害物として扱い、地下化判定の対象とする。
+
+同種・同方向ではない既存 transport-belt、および同等ではない transport-belt ghost は、Factorio の ghost 配置チェックが通る場合でも正常な既存経路としては扱わず、障害物として地下化判定の対象とする。
 
 地下化できない場合は Blocked とする。
 
