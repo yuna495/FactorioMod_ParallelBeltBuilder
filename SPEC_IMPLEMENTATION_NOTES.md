@@ -60,9 +60,27 @@ placement item.
 Existing same-name, same-direction belts and equivalent belt ghosts are reused
 without consuming items.
 
+## Planner Performance
+
+During drag preview, repeated updates for the same snapped tile are ignored.
+Preview rebuilding can run without a full GUI refresh; GUI refresh is reserved
+for state changes such as opening PBB, Count/Side/Belt/Placement changes,
+mode changes, Cancel, Draw, placement completion, and join/migration refresh.
+
+Each planner build still creates a canonical route-to-placement plan, but it
+avoids duplicate lane geometry generation for preview lines. The first and
+outer preview lines are derived from the generated lane tiles already present
+in the plan.
+
+World entity lookup is batched per planner build. Target tiles are bucketed by
+map chunk, entities are fetched per touched chunk, and then classified into a
+tile lookup table used by entry classification. `can_place_entity` remains the
+authority for terrain and collision checks, with a per-build cache for repeated
+same prototype/position/direction checks.
+
 ## Preview Lifecycle
 
-Preview render objects are per-player and are destroyed on Clear, Cancel, GUI
-close, player removal, surface change, and player leaving the game. The current
-plan can remain in storage after a player leaves; when the player rejoins, the
-GUI and preview are regenerated if a plan is still present.
+Preview render objects are per-player and are destroyed on Cancel, GUI close,
+player removal, surface change, and player leaving the game. The current plan
+can remain in storage after a player leaves; when the player rejoins, the GUI
+and preview are regenerated if a plan is still present.

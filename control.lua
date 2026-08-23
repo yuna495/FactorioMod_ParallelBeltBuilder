@@ -45,11 +45,13 @@ local function refresh_shortcut(player)
   player.set_shortcut_toggled("pbb-toggle-recording", window ~= nil)
 end
 
-local function rebuild_preview(player, p_state)
+local function rebuild_preview(player, p_state, update_gui)
   if not has_path(p_state) then
     p_state.plan = nil
     preview.clear(p_state)
-    gui.update(player)
+    if update_gui then
+      gui.update(player)
+    end
     return
   end
 
@@ -69,7 +71,9 @@ local function rebuild_preview(player, p_state)
 
   p_state.plan = plan
   preview.draw(player, p_state, plan)
-  gui.update(player)
+  if update_gui then
+    gui.update(player)
+  end
 end
 
 local confirm_plan
@@ -113,9 +117,11 @@ end
 
 local function begin_drawing(player)
   local p_state = state.get(player.index)
+  preview.clear(p_state)
+  state.clear_plan(p_state)
   if give_tool(player) then
     p_state.mode = constants.MODE_DRAWING
-    gui.get_or_create(player)
+    player.opened = gui.get_or_create(player)
     gui.update(player)
     refresh_shortcut(player)
     return true
@@ -138,7 +144,7 @@ local function open_pbb(player)
   gui.get_or_create(player)
   begin_drawing(player)
   refresh_shortcut(player)
-  rebuild_preview(player, p_state)
+  rebuild_preview(player, p_state, true)
 end
 
 local function cancel_plan(player, clear_cursor)
@@ -167,7 +173,7 @@ local function toggle_pbb(player)
   end
 end
 
-local function parse_and_apply_count(player)
+local function parse_and_apply_count(player, update_preview)
   local p_state = state.get(player.index)
   local window = player.gui.screen.pbb_main_window
   if not window or not window.flow_count or not window.flow_count.pbb_count_input then
@@ -182,7 +188,9 @@ local function parse_and_apply_count(player)
   end
 
   state.set_count(p_state, value)
-  rebuild_preview(player, p_state)
+  if update_preview ~= false then
+    rebuild_preview(player, p_state, true)
+  end
   return true
 end
 
@@ -209,6 +217,11 @@ local function update_draw_position(player, event)
 
   local p_state = state.get(player.index)
   local pos = geometry.snap_position(event.position)
+
+  if p_state.current_end and geometry.same_position(p_state.current_end, pos) then
+    return
+  end
+
   p_state.mode = constants.MODE_DRAWING
   set_tool(player, true)
 
@@ -219,7 +232,7 @@ local function update_draw_position(player, event)
 
   p_state.current_end = pos
 
-  rebuild_preview(player, p_state)
+  rebuild_preview(player, p_state, false)
 end
 
 local function selection_positions_from_area(area)
@@ -248,7 +261,7 @@ local function finish_selection(event)
   end
 
   set_tool(player, false)
-  rebuild_preview(player, p_state)
+  rebuild_preview(player, p_state, false)
   confirm_plan(player)
 end
 
@@ -260,7 +273,7 @@ function confirm_plan(player)
     return
   end
 
-  parse_and_apply_count(player)
+  parse_and_apply_count(player, false)
   p_state.mode = constants.MODE_PLACING
   gui.update(player)
 
@@ -333,7 +346,7 @@ script.on_event("pbb-flip-bend", function(event)
   else
     p_state.current_bend = constants.BEND_HORIZONTAL
   end
-  rebuild_preview(player, p_state)
+  rebuild_preview(player, p_state, false)
 end)
 
 script.on_event("pbb-anchor", function(event)
@@ -341,7 +354,7 @@ script.on_event("pbb-anchor", function(event)
   if not (player and holding_tool(player)) then return end
   local p_state = state.get(player.index)
   if append_current_segment(p_state) then
-    rebuild_preview(player, p_state)
+    rebuild_preview(player, p_state, true)
   end
 end)
 
@@ -420,7 +433,7 @@ script.on_event(defines.events.on_player_joined_game, function(event)
   local p_state = state.get(player.index)
   if has_path(p_state) then
     gui.get_or_create(player)
-    rebuild_preview(player, p_state)
+    rebuild_preview(player, p_state, true)
   else
     gui.update(player)
   end
@@ -457,7 +470,7 @@ script.on_event(defines.events.on_gui_selection_state_changed, function(event)
   local selected = event.element.selected_index
   if p_state.gui_belt_names and p_state.gui_belt_names[selected] then
     p_state.selected_belt_name = p_state.gui_belt_names[selected]
-    rebuild_preview(player, p_state)
+    rebuild_preview(player, p_state, true)
   end
 end)
 
@@ -475,16 +488,16 @@ script.on_event(defines.events.on_gui_click, function(event)
 
   if element.name == "pbb_count_minus" then
     state.set_count(p_state, p_state.count - 1)
-    rebuild_preview(player, p_state)
+    rebuild_preview(player, p_state, true)
   elseif element.name == "pbb_count_plus" then
     state.set_count(p_state, p_state.count + 1)
-    rebuild_preview(player, p_state)
+    rebuild_preview(player, p_state, true)
   elseif element.name == "pbb_side_left" and p_state.count > 1 then
     p_state.side = "left"
-    rebuild_preview(player, p_state)
+    rebuild_preview(player, p_state, true)
   elseif element.name == "pbb_side_right" and p_state.count > 1 then
     p_state.side = "right"
-    rebuild_preview(player, p_state)
+    rebuild_preview(player, p_state, true)
   elseif element.name == "pbb_place_normal" then
     p_state.placement = "normal"
     gui.update(player)

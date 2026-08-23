@@ -16,15 +16,6 @@ local function position_of(entry)
   return {x = entry.x, y = entry.y}
 end
 
-local function find_entities(surface, pos)
-  return surface.find_entities_filtered{
-    area = {
-      {pos.x - 0.45, pos.y - 0.45},
-      {pos.x + 0.45, pos.y + 0.45}
-    }
-  }
-end
-
 local function existing_transport_belt(entity, belt_name, direction)
   return entity.valid
     and entity.type == "transport-belt"
@@ -59,9 +50,102 @@ local function conflicting_transport_belt(entity, belt_name, direction)
     or is_transport_belt_ghost(entity)
 end
 
-local function classify_entry(surface, force, belt_name, entry)
+local function entry_key(entry)
+  return string.format("%d,%d", math.floor(entry.x), math.floor(entry.y))
+end
+
+local function tile_key_from_xy(x, y)
+  return string.format("%d,%d", x, y)
+end
+
+local function add_entity_to_tile(entities_by_tile, key, entity)
+  local entities = entities_by_tile[key]
+  if not entities then
+    entities = {}
+    entities_by_tile[key] = entities
+  end
+  entities[#entities + 1] = entity
+end
+
+local function entity_bounds(entity)
+  local ok, box = pcall(function()
+    return entity.bounding_box
+  end)
+  if ok and box then
+    return {
+      left_top = box.left_top or box[1],
+      right_bottom = box.right_bottom or box[2]
+    }
+  end
+
+  local pos = entity.position
+  return {
+    left_top = {x = pos.x - 0.5, y = pos.y - 0.5},
+    right_bottom = {x = pos.x + 0.5, y = pos.y + 0.5}
+  }
+end
+
+local function build_entity_lookup(surface, target_tiles, chunks)
+  local entities_by_tile = {}
+  local seen_entities = {}
+
+  for chunk_key in pairs(chunks) do
+    local comma = chunk_key:find(",", 1, true)
+    local cx = tonumber(chunk_key:sub(1, comma - 1))
+    local cy = tonumber(chunk_key:sub(comma + 1))
+    local area = {
+      {cx * 32 - 0.5, cy * 32 - 0.5},
+      {(cx + 1) * 32 + 0.5, (cy + 1) * 32 + 0.5}
+    }
+
+    for _, entity in ipairs(surface.find_entities_filtered{area = area}) do
+      if entity.valid then
+        local unit_key = entity.unit_number or (entity.name .. "@" .. entity.position.x .. "," .. entity.position.y)
+        if not seen_entities[unit_key] then
+          seen_entities[unit_key] = true
+          local box = entity_bounds(entity)
+          local min_x = math.floor(box.left_top.x)
+          local max_x = math.floor(box.right_bottom.x)
+          local min_y = math.floor(box.left_top.y)
+          local max_y = math.floor(box.right_bottom.y)
+
+          for x = min_x, max_x do
+            for y = min_y, max_y do
+              local key = tile_key_from_xy(x, y)
+              if target_tiles[key] then
+                add_entity_to_tile(entities_by_tile, key, entity)
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  return entities_by_tile
+end
+
+local function can_place_cached(surface, force, cache, name, pos, direction)
+  local key = name .. "|" .. math.floor(pos.x) .. "," .. math.floor(pos.y) .. "|" .. direction
+  local cached = cache[key]
+  if cached ~= nil then
+    return cached
+  end
+
+  local can_place = surface.can_place_entity{
+    name = name,
+    position = pos,
+    direction = direction,
+    force = force,
+    build_check_type = defines.build_check_type.manual_ghost
+  }
+  cache[key] = can_place
+  return can_place
+end
+
+local function classify_entry(surface, force, belt_name, entry, entities_by_tile, can_place_cache)
   local pos = position_of(entry)
-  local entities = find_entities(surface, pos)
+  local entities = entities_by_tile[entry_key(entry)] or {}
 
   for _, entity in ipairs(entities) do
     if existing_transport_belt(entity, belt_name, entry.direction)
@@ -81,13 +165,7 @@ local function classify_entry(surface, force, belt_name, entry)
     end
   end
 
-  local can_place = surface.can_place_entity{
-    name = belt_name,
-    position = pos,
-    direction = entry.direction,
-    force = force,
-    build_check_type = defines.build_check_type.manual_ghost
-  }
+  local can_place = can_place_cached(surface, force, can_place_cache, belt_name, pos, entry.direction)
 
   if can_place then
     entry.state = constants.STATE_NORMAL
@@ -103,22 +181,16 @@ local function endpoint_is_clear(entry)
     and entry.state == constants.STATE_NORMAL
 end
 
-local function endpoint_can_be_underground(surface, force, underground_name, entry, belt_to_ground_type)
+local function endpoint_can_be_underground(surface, force, can_place_cache, underground_name, entry, belt_to_ground_type)
   if not endpoint_is_clear(entry) then return false end
 
-  local params = {
-    name = underground_name,
-    position = position_of(entry),
-    direction = entry.direction,
-    force = force,
-    build_check_type = defines.build_check_type.manual_ghost
-  }
+  local direction = entry.direction
 
   if belt_to_ground_type == "output" then
-    params.direction = (entry.direction + 8) % 16
+    direction = (entry.direction + 8) % 16
   end
 
-  return surface.can_place_entity(params)
+  return can_place_cached(surface, force, can_place_cache, underground_name, position_of(entry), direction)
 end
 
 local function interior_can_be_undergrounded(entries, start_index, end_index)
@@ -164,7 +236,7 @@ local function blocked_run(entries, group, blocked_index)
   return first, last
 end
 
-local function find_underground_candidate(surface, force, entries, group, blocked_first, blocked_last, belt_info)
+local function find_underground_candidate(surface, force, can_place_cache, entries, group, blocked_first, blocked_last, belt_info)
   local max_distance = belt_info.max_underground_distance
   local underground_name = belt_info.underground_name
   if not (underground_name and max_distance) then
@@ -183,7 +255,7 @@ local function find_underground_candidate(surface, force, entries, group, blocke
       break
     end
 
-    if endpoint_can_be_underground(surface, force, underground_name, entry, "input") then
+    if endpoint_can_be_underground(surface, force, can_place_cache, underground_name, entry, "input") then
       for exit_index = blocked_last + 1, group.last do
         local underground_nodes = exit_index - entry_index - 1
         if underground_nodes > max_distance then
@@ -195,7 +267,7 @@ local function find_underground_candidate(surface, force, entries, group, blocke
           break
         end
 
-        if endpoint_can_be_underground(surface, force, underground_name, exit, "output")
+        if endpoint_can_be_underground(surface, force, can_place_cache, underground_name, exit, "output")
           and interior_can_be_undergrounded(entries, entry_index + 1, exit_index - 1)
         then
           return entry_index, exit_index
@@ -230,7 +302,7 @@ local function apply_underground(entries, entry_index, exit_index, belt_info)
   end
 end
 
-local function underground_lane(surface, force, lane, belt_info)
+local function underground_lane(surface, force, can_place_cache, lane, belt_info)
   local groups = group_segment_indices(lane.entries)
 
   for _, group in pairs(groups) do
@@ -242,6 +314,7 @@ local function underground_lane(surface, force, lane, belt_info)
         local entry_index, exit_index = find_underground_candidate(
           surface,
           force,
+          can_place_cache,
           lane.entries,
           group,
           blocked_first,
@@ -280,6 +353,39 @@ local function make_entries(tiles, belt_info)
   return entries
 end
 
+local function line_segments_from_tiles(tiles)
+  local by_segment = {}
+  for _, tile in ipairs(tiles or {}) do
+    local bucket = by_segment[tile.segment_index]
+    if not bucket then
+      bucket = {}
+      by_segment[tile.segment_index] = bucket
+    end
+    bucket[#bucket + 1] = tile
+  end
+
+  local lines = {}
+  for i = 1, #by_segment do
+    local bucket = by_segment[i]
+    if bucket and #bucket > 0 then
+      lines[#lines + 1] = {
+        from = {x = bucket[1].x, y = bucket[1].y},
+        to = {x = bucket[#bucket].x, y = bucket[#bucket].y}
+      }
+    end
+  end
+  return lines
+end
+
+local function remember_target_tile(target_tiles, chunks, tile)
+  local tx = math.floor(tile.x)
+  local ty = math.floor(tile.y)
+  target_tiles[tile_key_from_xy(tx, ty)] = true
+  local cx = math.floor(tx / 32)
+  local cy = math.floor(ty / 32)
+  chunks[tile_key_from_xy(cx, cy)] = true
+end
+
 function planner.build(player, p_state)
   local belt_name = catalog.ensure_selected_belt(p_state)
   if not belt_name then
@@ -311,6 +417,8 @@ function planner.build(player, p_state)
     line_lanes = {}
   }
   local occupied_by_lane = {}
+  local target_tiles = {}
+  local chunks = {}
 
   for lane_index = 0, p_state.count - 1 do
     local tiles, lane_err = geometry.generate_lane(axis_segments, lane_index, p_state.side)
@@ -330,6 +438,7 @@ function planner.build(player, p_state)
         return nil, "message.pbb-path-collapse-warning"
       end
       occupied_by_lane[key] = lane_index + 1
+      remember_target_tile(target_tiles, chunks, tile)
     end
 
     local lane = {
@@ -338,20 +447,25 @@ function planner.build(player, p_state)
       entries = make_entries(tiles, belt_info)
     }
 
-    for _, entry in ipairs(lane.entries) do
-      classify_entry(player.surface, player.force, belt_info.name, entry)
-    end
-
-    underground_lane(player.surface, player.force, lane, belt_info)
     table.insert(plan.lanes, lane)
+  end
+
+  local entities_by_tile = build_entity_lookup(player.surface, target_tiles, chunks)
+  local can_place_cache = {}
+
+  for _, lane in ipairs(plan.lanes) do
+    for _, entry in ipairs(lane.entries) do
+      classify_entry(player.surface, player.force, belt_info.name, entry, entities_by_tile, can_place_cache)
+    end
+    underground_lane(player.surface, player.force, can_place_cache, lane, belt_info)
     for _, entry in ipairs(lane.entries) do
       plan.entries[#plan.entries + 1] = entry
     end
   end
 
-  plan.line_lanes[1] = geometry.lane_line_segments(axis_segments, 0, p_state.side)
+  plan.line_lanes[1] = line_segments_from_tiles(plan.lanes[1] and plan.lanes[1].tiles)
   if p_state.count > 1 then
-    plan.line_lanes[p_state.count] = geometry.lane_line_segments(axis_segments, p_state.count - 1, p_state.side)
+    plan.line_lanes[p_state.count] = line_segments_from_tiles(plan.lanes[p_state.count] and plan.lanes[p_state.count].tiles)
   end
 
   return plan
