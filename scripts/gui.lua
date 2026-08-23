@@ -13,7 +13,6 @@ local function is_valid_window(window)
     and window.flow_count.pbb_count_input
     and window.flow_actions
     and window.flow_actions.pbb_draw
-    and window.flow_actions.pbb_confirm
 end
 
 local function update_toggle_button(btn, selected, width)
@@ -88,12 +87,11 @@ function gui.get_or_create(player)
   local flow_actions = window.add{type = "flow", name = "flow_actions", direction = "horizontal"}
   flow_actions.style.vertical_align = "center"
   flow_actions.style.horizontal_spacing = 8
+  local spacer = flow_actions.add{type = "empty-widget"}
+  spacer.style.horizontally_stretchable = true
+  spacer.style.width = 220
   local draw = flow_actions.add{type = "button", name = "pbb_draw", caption = {"gui.pbb-draw"}}
   draw.style.width = 75
-  local confirm = flow_actions.add{type = "button", name = "pbb_confirm", caption = {"gui.pbb-confirm"}}
-  confirm.style.width = 85
-  local clear = flow_actions.add{type = "button", name = "pbb_clear", caption = {"gui.pbb-clear"}}
-  clear.style.width = 75
 
   player.opened = window
   return window
@@ -145,11 +143,6 @@ function gui.update(player)
   window.flow_side.pbb_side_left.enabled = side_enabled
   window.flow_side.pbb_side_right.enabled = side_enabled
 
-  local has_path = (#p_state.segments > 0)
-    or (p_state.current_start ~= nil and p_state.current_end ~= nil)
-
-  window.flow_actions.pbb_confirm.enabled = has_path and p_state.mode ~= constants.MODE_PLACING
-  window.flow_actions.pbb_clear.enabled = has_path and p_state.mode ~= constants.MODE_PLACING
   window.flow_actions.pbb_draw.enabled = p_state.mode ~= constants.MODE_PLACING
 end
 

@@ -72,6 +72,8 @@ local function rebuild_preview(player, p_state)
   gui.update(player)
 end
 
+local confirm_plan
+
 local function set_tool(player, dragging)
   local target = preferred_tool_name(dragging)
   if not target then
@@ -125,6 +127,7 @@ end
 
 local function open_pbb(player)
   local p_state = state.get(player.index)
+  state.set_count(p_state, 1)
   local cursor_belt = catalog.belt_from_cursor(player)
   if cursor_belt then
     p_state.selected_belt_name = cursor_belt
@@ -246,9 +249,10 @@ local function finish_selection(event)
 
   set_tool(player, false)
   rebuild_preview(player, p_state)
+  confirm_plan(player)
 end
 
-local function confirm_plan(player)
+function confirm_plan(player)
   local p_state = state.get(player.index)
   if p_state.mode == constants.MODE_PLACING then return end
   if not has_path(p_state) then
@@ -487,12 +491,7 @@ script.on_event(defines.events.on_gui_click, function(event)
   elseif element.name == "pbb_place_ghost" then
     p_state.placement = "ghost"
     gui.update(player)
-  elseif element.name == "pbb_confirm" then
-    confirm_plan(player)
   elseif element.name == "pbb_draw" then
-    begin_drawing(player)
-  elseif element.name == "pbb_clear" then
-    cancel_plan(player, false)
     begin_drawing(player)
   end
 end)

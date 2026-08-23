@@ -22,8 +22,9 @@ modes are:
 * `drawing`
 * `placing`
 
-`placing` is a valid current state during confirmation and must not be treated
-as an obsolete recording-mode value during ordinary normalization.
+`placing` is a valid current state while the drag-finished plan is being placed
+and must not be treated as an obsolete recording-mode value during ordinary
+normalization.
 
 Old recording-mode fields such as `path`, `recording`, `placing`, and
 `belt_type` are treated as legacy save data and are removed during migration.
