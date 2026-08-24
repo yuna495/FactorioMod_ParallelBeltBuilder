@@ -1,4 +1,34 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.0.0
+Date: 08. 24. 2026
+  Features:
+    - Reworked Parallel Belt Builder into a virtual belt drawing and planning tool.
+    - Added a dedicated drawing tool that creates a virtual path instead of recording an already-built reference belt.
+    - Added support for Count 1 through 16. Count now starts at 1 whenever PBB is opened.
+    - Added single-belt drawing support using the same workflow as multi-lane placement.
+    - Added drag-release placement. The plan is placed when the player releases the drawing drag.
+    - Added L-shaped path drawing with a configurable bend toggle control.
+    - Added anchor support for creating multi-segment paths while drawing.
+    - Added automatic belt selection from the transport-belt item held in the player's cursor.
+    - Added dynamic transport-belt prototype discovery and speed-based belt list sorting.
+    - Added per-lane underground belt planning.
+    - Added underground entrance and exit preview markers.
+    - Added blocked markers for positions that cannot be placed normally or undergrounded.
+    - Added lightweight line-based preview for planned lanes.
+    - Added Start and Anchor editing markers that remain visible independently of placement-plan validity.
+    - Added Factorio standard Undo integration for entities and ghosts newly created by a PBB placement.
+  Changes:
+    - Removed the old reference-belt recording workflow.
+    - Removed the assumption that the first lane already exists in the world.
+    - Removed the minimum parallel count of 2.
+    - Removed the default Count value of 4.
+    - Removed the Confirm button workflow.
+    - Existing same-type, same-direction belts and equivalent ghosts are now reused instead of replaced or charged again.
+    - Normal placement can now mix physical entities and ghosts when inventory is only partially available.
+  Info:
+    - PBB does not automatically remove obstacles, replace existing entities, landfill terrain, destroy cliffs, or route around obstacles.
+    - Modded transport belts are supported on a best-effort basis when they behave like normal transport-belt prototypes.
+---------------------------------------------------------------------------------------------------
 Version: 1.0.3
 Date: 07. 26. 2026
   Features:
