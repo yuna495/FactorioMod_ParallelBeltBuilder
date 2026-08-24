@@ -5,6 +5,7 @@ local preview = {}
 local LINE_COLOR = {r = 0.2, g = 0.9, b = 1.0, a = 0.85}
 local OUTER_LINE_COLOR = {r = 0.95, g = 0.85, b = 0.25, a = 0.85}
 local BLOCKED_TINT = {r = 1.0, g = 0.15, b = 0.1, a = 0.95}
+local START_TINT = {r = 0.15, g = 0.75, b = 1.0, a = 0.95}
 local ANCHOR_TINT = {r = 0.35, g = 0.95, b = 0.45, a = 0.9}
 
 local function store(p_state, object)
@@ -42,6 +43,22 @@ local function marker_orientation(direction)
   return (direction or 0) / 16
 end
 
+local function position_key(pos)
+  return string.format("%d,%d", math.floor(pos.x), math.floor(pos.y))
+end
+
+local function draw_edit_marker(player, p_state, pos, tint)
+  store(p_state, rendering.draw_sprite{
+    sprite = "pbb-anchor",
+    target = pos,
+    x_scale = 0.42,
+    y_scale = 0.42,
+    tint = tint,
+    surface = player.surface,
+    players = {player}
+  })
+end
+
 local function draw_markers(player, p_state, plan)
   for _, entry in ipairs(plan.entries or {}) do
     if entry.kind == constants.KIND_UNDERGROUND_INPUT
@@ -70,26 +87,33 @@ local function draw_markers(player, p_state, plan)
   end
 end
 
-local function draw_anchor(player, p_state)
-  local target = p_state.current_start or (p_state.segments[#p_state.segments] and p_state.segments[#p_state.segments].to)
-  if not target then return end
-  store(p_state, rendering.draw_sprite{
-    sprite = "pbb-anchor",
-    target = target,
-    x_scale = 0.42,
-    y_scale = 0.42,
-    tint = ANCHOR_TINT,
-    surface = player.surface,
-    players = {player}
-  })
+local function draw_edit_markers(player, p_state)
+  local seen = {}
+  local first_segment = p_state.segments and p_state.segments[1] or nil
+  local start = first_segment and first_segment.from or p_state.current_start
+
+  if start then
+    seen[position_key(start)] = true
+    draw_edit_marker(player, p_state, start, START_TINT)
+  end
+
+  for _, segment in ipairs(p_state.segments or {}) do
+    local anchor = segment.to
+    local key = position_key(anchor)
+    if not seen[key] then
+      seen[key] = true
+      draw_edit_marker(player, p_state, anchor, ANCHOR_TINT)
+    end
+  end
 end
 
 function preview.draw(player, p_state, plan)
   preview.clear(p_state)
-  if not plan then return end
-  draw_lines(player, p_state, plan)
-  draw_markers(player, p_state, plan)
-  draw_anchor(player, p_state)
+  if plan then
+    draw_lines(player, p_state, plan)
+    draw_markers(player, p_state, plan)
+  end
+  draw_edit_markers(player, p_state)
 end
 
 return preview

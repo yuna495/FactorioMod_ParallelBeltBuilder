@@ -48,7 +48,7 @@ end
 local function rebuild_preview(player, p_state, update_gui)
   if not has_path(p_state) then
     p_state.plan = nil
-    preview.clear(p_state)
+    preview.draw(player, p_state, nil)
     if update_gui then
       gui.update(player)
     end

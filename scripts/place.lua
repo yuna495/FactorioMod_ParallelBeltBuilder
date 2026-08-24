@@ -54,12 +54,26 @@ local function is_placeable_entry(entry)
     and entry.prototype ~= nil
 end
 
-local function place_physical(player, entry)
-  return player.surface.create_entity(physical_entity_params(player, entry))
+local function apply_undo_params(params, undo_state)
+  params.player = undo_state.player_index
+  params.undo_index = undo_state.started and 1 or 0
 end
 
-local function place_ghost(player, entry)
-  return player.surface.create_entity(ghost_entity_params(player, entry))
+local function create_with_undo(player, params, undo_state)
+  apply_undo_params(params, undo_state)
+  local entity = player.surface.create_entity(params)
+  if entity then
+    undo_state.started = true
+  end
+  return entity
+end
+
+local function place_physical(player, entry, undo_state)
+  return create_with_undo(player, physical_entity_params(player, entry), undo_state)
+end
+
+local function place_ghost(player, entry, undo_state)
+  return create_with_undo(player, ghost_entity_params(player, entry), undo_state)
 end
 
 function place.commit(player, plan, placement_mode)
@@ -70,6 +84,10 @@ function place.commit(player, plan, placement_mode)
 
   local free_build = player.controller_type == defines.controllers.editor or player.cheat_mode
   local available = {}
+  local undo_state = {
+    player_index = player.index,
+    started = false
+  }
 
   local function item_count(item_name)
     if free_build then return 0 end
@@ -88,22 +106,22 @@ function place.commit(player, plan, placement_mode)
     elseif is_placeable_entry(entry) then
       if placement_mode == "normal" then
         if free_build then
-          if place_physical(player, entry) then
+          if place_physical(player, entry, undo_state) then
             placed_entities = placed_entities + 1
           end
         elseif item_count(entry.item_name) > 0 then
-          if place_physical(player, entry) then
+          if place_physical(player, entry, undo_state) then
             placed_entities = placed_entities + 1
             available[entry.item_name] = available[entry.item_name] - 1
             player.remove_item{name = entry.item_name, count = 1}
           end
         else
-          if place_ghost(player, entry) then
+          if place_ghost(player, entry, undo_state) then
             placed_ghosts = placed_ghosts + 1
           end
         end
       else
-        if place_ghost(player, entry) then
+        if place_ghost(player, entry, undo_state) then
           placed_ghosts = placed_ghosts + 1
         end
       end

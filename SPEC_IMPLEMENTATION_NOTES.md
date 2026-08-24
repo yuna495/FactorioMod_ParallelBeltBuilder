@@ -60,6 +60,13 @@ placement item.
 Existing same-name, same-direction belts and equivalent belt ghosts are reused
 without consuming items.
 
+PBB-created entities are added to the placing player's standard Factorio undo
+queue through `LuaSurface.create_entity` parameters. The first successful
+creation in one commit uses `undo_index = 0` to create a new undo item; later
+successful creations in the same commit use `undo_index = 1` to append to that
+latest item. Existing or blocked entries are not created and are not added to
+Undo.
+
 ## Planner Performance
 
 During drag preview, repeated updates for the same snapped tile are ignored.
@@ -84,3 +91,9 @@ Preview render objects are per-player and are destroyed on Cancel, GUI close,
 player removal, surface change, and player leaving the game. The current plan
 can remain in storage after a player leaves; when the player rejoins, the GUI
 and preview are regenerated if a plan is still present.
+
+Start and Anchor markers are editing markers, not placement-plan markers. They
+are drawn from raw drawing state even when the canonical placement plan is nil:
+the first raw segment's `from`, or `current_start` before any raw segment, is
+the Start marker; every raw segment `to` is a user-created Anchor marker. L-bend
+intermediate points are not anchors.

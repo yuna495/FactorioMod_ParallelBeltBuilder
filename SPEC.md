@@ -438,6 +438,20 @@ Blocked 箇所は赤系のアイコンまたはブロック表示とし、「確
 
 必要であれば将来的に入口と出口の間を簡易線で示すことを検討できるが、必須仕様にはしない。
 
+### 11.5 編集用 marker
+
+Start marker と Anchor marker は、canonical placement plan とは独立した編集用 marker として扱う。
+
+Start marker は、経路編集中は常に表示する。raw segment が存在する場合は最初の raw segment の `from` を Start 地点とし、raw segment がまだ存在しない場合は現在の `current_start` を Start 地点とする。
+
+R 操作で確定した Anchor はすべて表示する。現在の実装では、R 操作によって `segments` に追加された各 raw segment の `to` を Anchor 地点として扱う。
+
+自動 L 字経路によって内部的に生成される bend は Anchor として表示しない。
+
+Start と Anchor、または複数 Anchor が同一 tile になる場合は、同一位置に marker を重ねず 1 つだけ表示する。
+
+現在の cursor 位置によって canonical placement plan が一時的に生成できない場合でも、既存の Start marker と Anchor marker は表示を維持する。
+
 ## 12. 確定と配置
 
 ### 12.1 確定
@@ -471,13 +485,36 @@ Ghost では、正常に配置可能な通常ベルトおよび underground-belt
 
 ドラッグ終了後の script による最終配置では、現在の player position からの build reach は考慮しない。
 
-### 12.3 配置不能位置
+### 12.3 Factorio 標準 Undo
+
+PBB が 1 回の commit で新規生成した entity は、可能な限り 1 つの Factorio 標準 Undo item へ登録する。
+
+対象:
+
+* 新規 transport-belt
+* 新規 underground-belt input
+* 新規 underground-belt output
+* 新規 entity ghost
+
+対象外:
+
+* 正常な既存経路として再利用した既存 transport-belt
+* 正常な既存経路として再利用した既存 entity ghost
+* Blocked として未配置になった位置
+* underground hidden 区間
+* PBB が今回作成していない既存 entity
+
+Normal / Ghost のどちらでも、PBB が新規作成した entity または ghost は Factorio 標準 Undo の対象とする。
+
+PBB は独自 Undo stack を持たない。ここで扱う Undo は、Factorio 標準 Undo queue への統合であり、Mod 独自の配置後 Undo 機能ではない。
+
+### 12.4 配置不能位置
 
 配置仕様が normal 状態であっても、確定時点で実際に配置できない場合は、その位置だけ未配置とする。
 
 配置不能な位置のために、自動撤去、自動迂回、無理な地下化は行わない。
 
-### 12.4 既存エンティティとの重複
+### 12.5 既存エンティティとの重複
 
 計画経路上に同種・同方向の既存 transport-belt が存在する場合、その位置は正常な既存経路として扱う。
 
@@ -549,7 +586,7 @@ Factorio の `storage` で保存可能な LuaObject は利用可能とする。
 
 Cancel は Factorio 標準の clear-cursor 操作に対応し、GUI は残してよい。Cancel 後は Draw 操作によって専用描画ツールを再取得し、新しい経路の描画を再開できる。
 
-Mod 独自の配置後 Undo 機能は、この仕様では必須としない。
+Mod 独自の配置後 Undo 機能は必須としない。PBB が提供するのは独自 Undo ではなく、Factorio 標準 Undo queue への新規生成 entity 登録である。
 
 ## 14. マルチプレイヤー
 
