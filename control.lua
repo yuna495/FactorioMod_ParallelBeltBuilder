@@ -30,8 +30,8 @@ local function item_prototype_exists(name)
   return prototypes and prototypes.item and prototypes.item[name] ~= nil
 end
 
-local function preferred_tool_name(dragging)
-  local name = dragging and constants.TOOL or constants.PREVIEW_TOOL
+local function preferred_tool_name()
+  local name = constants.PREVIEW_TOOL
   return item_prototype_exists(name) and name or nil
 end
 
@@ -78,8 +78,8 @@ end
 
 local confirm_plan
 
-local function set_tool(player, dragging)
-  local target = preferred_tool_name(dragging)
+local function set_tool(player)
+  local target = preferred_tool_name()
   if not target then
     return false
   end
@@ -108,7 +108,7 @@ local function set_tool(player, dragging)
 end
 
 local function give_tool(player)
-  if not set_tool(player, false) then
+  if not set_tool(player) then
     player.print({"message.pbb-cursor-not-cleared"})
     return false
   end
@@ -213,55 +213,45 @@ local function append_current_segment(p_state)
 end
 
 local function update_draw_position(player, event)
-  if not holding_tool(player) then return end
+  if not is_tool_name(event.item) or not holding_tool(player) then return false end
+  if event.surface ~= player.surface then return false end
 
   local p_state = state.get(player.index)
-  local pos = geometry.snap_position(event.position)
+  if p_state.mode ~= constants.MODE_DRAWING then return false end
+  local start = geometry.snap_position(event.position)
+  local pos = geometry.snap_position(event.cursor_position)
+
+  -- Preselection events are best-effort. Recover from a missing start event,
+  -- and discard a stale drawing when a different drag begins.
+  if p_state.drag_start and not geometry.same_position(p_state.drag_start, start) then
+    preview.clear(p_state)
+    state.clear_plan(p_state)
+    p_state.mode = constants.MODE_DRAWING
+  end
+  p_state.drag_start = start
 
   if p_state.current_end and geometry.same_position(p_state.current_end, pos) then
-    return
+    return true
   end
-
-  p_state.mode = constants.MODE_DRAWING
-  set_tool(player, true)
 
   if not p_state.current_start then
     local last = p_state.segments[#p_state.segments]
-    p_state.current_start = last and {x = last.to.x, y = last.to.y} or pos
+    p_state.current_start = last and {x = last.to.x, y = last.to.y} or start
   end
 
   p_state.current_end = pos
 
   rebuild_preview(player, p_state, false)
-end
-
-local function selection_positions_from_area(area)
-  return geometry.snap_position({
-    x = area.left_top.x + 0.5,
-    y = area.left_top.y + 0.5
-  }), geometry.snap_position({
-    x = area.right_bottom.x - 0.5,
-    y = area.right_bottom.y - 0.5
-  })
+  return true
 end
 
 local function finish_selection(event)
   if not is_tool_name(event.item) then return end
   local player = player_of(event)
   if not player then return end
-  local p_state = state.get(player.index)
-
-  if not p_state.current_start then
-    local start_pos, end_pos = selection_positions_from_area(event.area)
-    p_state.current_start = start_pos
-    p_state.current_end = end_pos
-  elseif not p_state.current_end and #p_state.segments == 0 then
-    local _, end_pos = selection_positions_from_area(event.area)
-    p_state.current_end = end_pos
-  end
-
-  set_tool(player, false)
-  rebuild_preview(player, p_state, false)
+  -- Final selection coordinates are authoritative, including when the last
+  -- change event (or every preselection event) was dropped.
+  if not update_draw_position(player, event) then return end
   confirm_plan(player)
 end
 
@@ -290,7 +280,7 @@ function confirm_plan(player)
 
   preview.clear(p_state)
   state.clear_plan(p_state)
-  if holding_tool(player) and set_tool(player, false) then
+  if holding_tool(player) and set_tool(player) then
     p_state.mode = constants.MODE_DRAWING
   else
     p_state.mode = constants.MODE_IDLE
@@ -365,10 +355,24 @@ script.on_event("pbb-cancel", function(event)
   end
 end)
 
-script.on_event(defines.events.on_pre_build, function(event)
+script.on_event({defines.events.on_player_start_selected_area, defines.events.on_player_change_selected_area}, function(event)
   local player = player_of(event)
   if player then
     update_draw_position(player, event)
+  end
+end)
+
+script.on_event(defines.events.on_player_cancel_selected_area, function(event)
+  if not is_tool_name(event.item) then return end
+  local player = player_of(event)
+  if not (player and holding_tool(player) and event.surface == player.surface) then return end
+  local p_state = state.get(player.index)
+  local start = geometry.snap_position(event.position)
+  if p_state.drag_start and geometry.same_position(p_state.drag_start, start) then
+    preview.clear(p_state)
+    state.clear_plan(p_state)
+    p_state.mode = constants.MODE_DRAWING
+    gui.update(player)
   end
 end)
 
@@ -378,11 +382,7 @@ script.on_event(defines.events.on_built_entity, function(event)
     and entity.valid
     and (entity.name == constants.DUMMY_BELT or entity.name == constants.DUMMY_ENTITY)
   then
-    local player = player_of(event)
     entity.destroy()
-    if player then
-      set_tool(player, true)
-    end
   end
 end)
 

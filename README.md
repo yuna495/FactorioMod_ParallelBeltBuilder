@@ -1,6 +1,6 @@
 # Parallel Belt Builder
 
-Parallel Belt Builder is a Factorio 2.0 mod for drawing virtual transport-belt paths and placing the planned belts in one action.
+Parallel Belt Builder is a Factorio 2.1 mod for drawing virtual transport-belt paths and placing the planned belts in one action.
 
 It is no longer a tool that copies an already-built reference belt. Version 2.0 turns PBB into a general belt drawing tool: draw a path, optionally expand it into parallel lanes, preview underground sections and blocked positions, then release the drag to place the plan.
 
@@ -63,9 +63,25 @@ Underground entrances, underground exits, blocked positions, the start point, an
 
 ## Compatibility Notes
 
-PBB targets Factorio 2.0.
+PBB targets Factorio 2.1.22 or later in the 2.1 series. Drag previews use selection pre-events introduced in 2.1.22; no additional third-party mod is required.
+
+Mod version 2.1.0 retains the features, prototype names, and persistent player-state format of 2.0.0. Use the previous release for Factorio 2.0.
 
 Vanilla transport belts are supported. Modded transport belts are discovered dynamically when they behave like normal transport-belt prototypes and have usable placement items. Special belt prototypes with custom rules or unusual constraints are not guaranteed to work.
+
+## Development Checks
+
+Run the selection-handler regression checks and isolated engine integration checks from PowerShell (from the mod root):
+
+```powershell
+lua tests/selection.lua
+./tests/run-factorio.ps1 -FactorioExe 'C:/path/to/Factorio/bin/x64/factorio.exe'
+./tests/run-factorio.ps1 -FactorioExe 'C:/path/to/Factorio/bin/x64/factorio.exe' -SpaceAge
+```
+
+The runner copies the mod to a new temporary directory and creates its own config, mod list, and save. It does not edit existing saves or the normal Factorio configuration. It checks real engine prototypes, lane planning, underground connections, placement, blocked positions, render-object cleanup, and save/reload. Inventory uses a test adapter because headless maps have no connected player.
+
+Manual checks still required: shortcut/GUI, cursor selection, drag release, F/R/clear-cursor, player-specific previews, standard Undo/Redo, upgrading an existing 2.0 save, and multiplayer synchronization. Test these with copies of existing saves; Factorio 2.1 saves cannot be downgraded to 2.0.
 
 ## License Notes
 

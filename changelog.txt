@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 2.1.0
+Date: 11. 25. 2026
+  Bugfixes:
+    - Fixed missing drag previews by using Factorio 2.1 selection pre-events instead of build events and cursor-tool switching.
+    - Use final selection start/cursor coordinates to preserve drag direction and recover from missing preview events.
+  Changes:
+    - Require Factorio 2.1.22 or later for the selection pre-events used by drag previews.
+    - Updated the supported Factorio version to 2.1 while retaining the existing drawing, planning, placement, preview, and Undo features.
+    - Preserved prototype identifiers and persistent player state for existing saves.
+---------------------------------------------------------------------------------------------------
 Version: 2.0.0
 Date: 08. 24. 2026
   Features:

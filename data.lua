@@ -79,6 +79,7 @@ local base_tool = {
   subgroup = "tool",
   order = "c[automated-construction]-p[pbb-draw-tool]",
   mouse_cursor = "arrow",
+  send_pre_selection_events = true,
   flags = {"only-in-cursor", "spawnable", "not-stackable"},
   hidden = true,
   hidden_in_factoriopedia = true,
@@ -96,11 +97,9 @@ local base_tool = {
 
 local tool = table.deepcopy(base_tool)
 tool.name = "pbb-draw-tool"
-tool.place_result = "pbb-dummy-entity"
 
 local preview_tool = table.deepcopy(base_tool)
 preview_tool.name = "pbb-preview-tool"
-preview_tool.place_result = "pbb-dummy-transport-belt"
 
 data:extend({
   pbb_layer,

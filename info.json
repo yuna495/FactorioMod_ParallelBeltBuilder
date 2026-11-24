@@ -1,9 +1,9 @@
 {
   "name": "ParallelBeltBuilder",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "title": "ParallelBeltBuilder",
   "author": "yuna495",
   "description": "Draw virtual belt paths and place 1 to 16 planned transport-belt lanes at once, with anchors, L-bends, per-lane underground planning, blocked markers, ghost placement, and standard Undo support.",
-  "factorio_version": "2.0",
-  "dependencies": []
+  "factorio_version": "2.1",
+  "dependencies": ["base >= 2.1.22"]
 }
